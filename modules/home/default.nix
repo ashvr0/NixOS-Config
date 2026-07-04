@@ -1,4 +1,4 @@
-{ pkgs, inputs, vars, ... }:
+{ pkgs, inputs, username, ... }:
 
 let
   awww = inputs.awww;
@@ -14,14 +14,13 @@ in
     ./cava/default.nix
     ./spicetify/spicetify.nix
     ./matugen/default.nix
-    ./rofi/default.nix
     ./nvim/default.nix
-    ./fastfetch.nix
+    ./fastfetch/default.nix
     ./yazi.nix
   ];
 
-  home.username = vars.username;
-  home.homeDirectory = "/home/${vars.username}";
+  home.username = username;
+  home.homeDirectory = "/home/${username}";
   home.stateVersion = "26.05";
   home.enableNixpkgsReleaseCheck = false;
 

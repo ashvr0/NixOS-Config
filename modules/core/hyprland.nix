@@ -1,5 +1,4 @@
 { config, pkgs, ... }:
-
 {
   programs.hyprland = {
     enable = true;
@@ -40,6 +39,11 @@
   
   # Set cursor size
   environment.sessionVariables.XCURSOR_SIZE = "24";
+
+  # Cursor theme (Nordic-cursors)
+  environment.sessionVariables.XCURSOR_THEME = "Nordic-cursors";
+  environment.sessionVariables.HYPRCURSOR_THEME = "Nordic-cursors";
+  environment.sessionVariables.HYPRCURSOR_SIZE = "24";
 
   hardware.graphics = {
     enable = true;

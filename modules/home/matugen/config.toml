@@ -2,17 +2,25 @@
 reload_apps = true
 
 [templates.hyprland]
-input_path = "/home/yurxi/.config/matugen/templates/hyprland.lua.template"
-output_path = "/home/yurxi/.config/hypr/colors.lua"
+input_path = "~/.config/matugen/templates/hyprland.lua.template"
+output_path = "~/.config/hypr/colors.lua"
+
+[templates.quickshell]
+input_path = "~/.config/matugen/templates/quickshell.colors.json.template"
+output_path = "~/.config/quickshell/colors.json"
 
 [templates.alacritty]
-input_path = "/home/yurxi/.config/matugen/templates/alacritty-colors.toml.template"
-output_path = "/home/yurxi/.cache/matugen/colors.toml"
+input_path = "~/.config/matugen/templates/alacritty-colors.toml.template"
+output_path = "~/.cache/matugen/colors.toml"
 
 [templates.cava]
-input_path = '~/.config/matugen/templates/cava-colors.ini.template'
-output_path = '~/.config/cava/colors'
+input_path = "~/.config/matugen/templates/cava-colors.ini.template"
+output_path = "~/.config/cava/colors"
 
 [templates.rofi]
-input_path = '/home/yurxi/.config/matugen/templates/rofi-colors.rasi.template'
+input_path = '~/.config/matugen/templates/rofi-colors.rasi.template'
 output_path = '~/.config/rofi/colors.rasi'
+
+[templates.nvim]
+input_path = "~/.config/matugen/templates/nvim-colors.lua.template"
+output_path = "~/.config/nvim/matugen_colors.lua"

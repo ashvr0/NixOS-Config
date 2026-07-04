@@ -1,0 +1,19 @@
+{
+  "bg_base": "#101418",
+  "bg_elevated": "#1d2024",
+  "bg_elevated2": "#191c20",
+
+  "border": "#8c9199",
+  "border_soft": "#42474e",
+
+  "text": "#e1e2e8",
+  "text_muted": "#bac8db",
+  "text_dim": "#c2c7cf",
+
+  "accent": "#9fcafc",
+  "accent_text": "#003257",
+  "accent_soft": "#164974",
+
+  "error": "#ffb4ab",
+  "warning": "#d5bee5"
+}

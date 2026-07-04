@@ -10,8 +10,6 @@ ShellRoot {
   id: root
 
   property string userName: "User"
-
-  // ── shared lock state across every monitor ───────────────────────────
   QtObject {
     id: lockState
     property bool inputActive: false
@@ -52,6 +50,27 @@ ShellRoot {
     }
   }
 
+  // wallpaper bg
+  property string fallbackWallpaper: Quickshell.env("HOME") + "/.config/hypr/wallpapers/winter.png"
+  property string wallpaperPath: ""
+
+  property string profilePicturePath: Quickshell.env("HOME") + "/.config/hypr/profile.jpg"
+
+  Process {
+    id: wallpaperQuery
+    command: ["awww", "query"]
+    running: true
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var match = this.text.match(/image:\s*(\S+)/)
+        root.wallpaperPath = (match && match[1]) ? match[1] : root.fallbackWallpaper
+      }
+    }
+    onExited: function(exitCode) {
+      if (root.wallpaperPath === "") root.wallpaperPath = root.fallbackWallpaper
+    }
+  }
+
   WlSessionLock {
     id: lockRoot
     locked: true
@@ -59,14 +78,10 @@ ShellRoot {
     WlSessionLockSurface {
       id: lockSurface
 
-      // ── point this at your real wallpaper file ─────────────────────
-      property string wallpaperPath: "file://" + Quickshell.env("HOME") + "/.config/hypr/wallpapers/s-b-vonlanthen-A8iLzX6OddM.jpg"
-
-      // ── background: blurred + dimmed wallpaper ─────────────────────
       Image {
         id: bgImage
         anchors.fill: parent
-        source: lockSurface.wallpaperPath
+        source: root.wallpaperPath !== "" ? "file://" + root.wallpaperPath : ""
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
         cache: false
@@ -88,7 +103,6 @@ ShellRoot {
         Behavior on opacity { NumberAnimation { duration: 400 } }
       }
 
-      // ── click anywhere reveals the password box ────────────────────
       MouseArea {
         anchors.fill: parent
         onClicked: {
@@ -97,7 +111,6 @@ ShellRoot {
         }
       }
 
-      // ── any keypress also reveals it (catch-all under everything) ──
       Item {
         anchors.fill: parent
         focus: !lockState.inputActive
@@ -107,7 +120,6 @@ ShellRoot {
         }
       }
 
-      // ── IDLE: big clock ───────────────────────────────────────────
       ColumnLayout {
         id: clockBlock
         anchors.centerIn: parent
@@ -128,7 +140,7 @@ ShellRoot {
           font.family: "JetBrainsMono Nerd Font"
           font.pixelSize: 130
           font.weight: Font.Bold
-          color: "#cdd6f4"
+          color: MatugenColors.text
         }
 
         Text {
@@ -137,7 +149,7 @@ ShellRoot {
           font.family: "JetBrainsMono Nerd Font"
           font.pixelSize: 20
           font.weight: Font.Medium
-          color: "#a6adc8"
+          color: MatugenColors.textMuted
         }
 
         Timer {
@@ -149,8 +161,8 @@ ShellRoot {
           }
         }
       }
-
-      // ── REVEALED: welcome back + pin entry ──────────────────────────
+      
+      // Welcome back section
       ColumnLayout {
         id: authBlock
         anchors.centerIn: parent
@@ -165,21 +177,74 @@ ShellRoot {
         Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
         Behavior on scale { NumberAnimation { duration: 450; easing.type: Easing.OutBack } }
 
-        // avatar circle
-        Rectangle {
+        // profile picture
+        Item {
           Layout.alignment: Qt.AlignHCenter
-          width: 84; height: 84; radius: 42
-          color: "#313244"
-          border.width: 2
-          border.color: lockState.failed ? "#f38ba8" : (lockState.authenticating ? "#fab387" : "#89b4fa")
-          Behavior on border.color { ColorAnimation { duration: 250 } }
+          width: 94
+          height: 94
 
-          Text {
-            anchors.centerIn: parent
-            text: root.userName.charAt(0).toUpperCase()
-            font.pixelSize: 36
-            font.weight: Font.Bold
-            color: "#cdd6f4"
+          Image {
+            id: profileImg
+            anchors.fill: parent
+            source: "file://" + root.profilePicturePath
+            fillMode: Image.PreserveAspectCrop
+            smooth: true
+            visible: false
+            asynchronous: true
+          }
+
+          Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: MatugenColors.bgElevated
+            visible: profileImg.status !== Image.Ready
+
+            Text {
+              anchors.centerIn: parent
+              text: root.userName.length > 0 ? root.userName.charAt(0).toUpperCase() : "?"
+              font.family: "JetBrainsMono Nerd Font"
+              font.pixelSize: 36
+              font.weight: Font.Bold
+              color: MatugenColors.textMuted
+            }
+          }
+
+          MultiEffect {
+            anchors.fill: profileImg
+            source: profileImg
+            maskEnabled: true
+            maskSource: profileMask
+            visible: profileImg.status === Image.Ready
+          }
+
+          Item {
+            id: profileMask
+            width: profileImg.width
+            height: profileImg.height
+            layer.enabled: true
+            visible: false
+
+            Rectangle {
+              anchors.fill: parent
+              radius: width / 2
+              color: "white"
+            }
+          }
+
+          Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: "transparent"
+            border.width: 2
+            border.color: lockState.failed
+                ? MatugenColors.error
+                : (lockState.authenticating
+                    ? MatugenColors.warning
+                    : MatugenColors.accent)
+
+            Behavior on border.color {
+                ColorAnimation { duration: 250 }
+            }
           }
         }
 
@@ -189,7 +254,7 @@ ShellRoot {
           font.family: "JetBrainsMono Nerd Font"
           font.pixelSize: 22
           font.weight: Font.Bold
-          color: "#cdd6f4"
+          color: MatugenColors.text
         }
 
         Text {
@@ -197,22 +262,22 @@ ShellRoot {
           text: lockState.failed ? "Wrong password — try again" : (lockState.authenticating ? "Checking..." : "Enter your password")
           font.family: "JetBrainsMono Nerd Font"
           font.pixelSize: 13
-          color: lockState.failed ? "#f38ba8" : "#a6adc8"
+          color: lockState.failed ? MatugenColors.error : MatugenColors.textMuted
           Behavior on color { ColorAnimation { duration: 200 } }
         }
 
-        // pin pill
+        // This is the pin/password
         Rectangle {
           id: pinPill
           Layout.alignment: Qt.AlignHCenter
           width: 280; height: 54; radius: 27
           clip: true
 
-          color: lockState.failed ? Qt.rgba(0.95, 0.55, 0.66, 0.12) : Qt.rgba(0.19, 0.19, 0.27, 0.7)
+          color: lockState.failed ? Qt.rgba(MatugenColors.error.r, MatugenColors.error.g, MatugenColors.error.b, 0.12) : Qt.rgba(MatugenColors.bgElevated.r, MatugenColors.bgElevated.g, MatugenColors.bgElevated.b, 0.7)
           border.width: 2
-          border.color: lockState.failed ? "#f38ba8"
-                      : lockState.authenticating ? "#fab387"
-                      : pinField.text.length > 0 ? "#89b4fa"
+          border.color: lockState.failed ? MatugenColors.error
+                      : lockState.authenticating ? MatugenColors.warning
+                      : pinField.text.length > 0 ? MatugenColors.accent
                       : Qt.rgba(1, 1, 1, 0.08)
 
           Behavior on color { ColorAnimation { duration: 200 } }
@@ -238,13 +303,12 @@ ShellRoot {
               model: pinField.text.length
               Rectangle {
                 width: 10; height: 10; radius: 5
-                color: lockState.failed ? "#f38ba8" : "#cdd6f4"
+                color: lockState.failed ? MatugenColors.error : MatugenColors.text
                 anchors.verticalCenter: parent.verticalCenter
               }
             }
           }
 
-          // placeholder — only visible when no dots are showing
           Text {
             anchors.centerIn: parent
             text: "Password"

@@ -1,0 +1,19 @@
+{
+  "bg_base": "{{colors.surface.default.hex}}",
+  "bg_elevated": "{{colors.surface_container.default.hex}}",
+  "bg_elevated2": "{{colors.surface_container_low.default.hex}}",
+
+  "border": "{{colors.outline.default.hex}}",
+  "border_soft": "{{colors.outline_variant.default.hex}}",
+
+  "text": "{{colors.on_surface.default.hex}}",
+  "text_muted": "{{colors.secondary.default.hex}}",
+  "text_dim": "{{colors.on_surface_variant.default.hex}}",
+
+  "accent": "{{colors.primary.default.hex}}",
+  "accent_text": "{{colors.on_primary.default.hex}}",
+  "accent_soft": "{{colors.primary_container.default.hex}}",
+
+  "error": "{{colors.error.default.hex}}",
+  "warning": "{{colors.tertiary.default.hex}}"
+}

@@ -1,6 +1,6 @@
 {
   description = "Ash Nix configuration for NixOS";
-  
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     spicetify-nix.url = "github:Gerg-L/spicetify-nix";
@@ -8,38 +8,52 @@
     zen-browser.url = "github:MarceColl/zen-browser-flake";
     quickshell.url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
     nix-gaming.url = "github:fufexan/nix-gaming";
-    nix-gaming.inputs.nixpkgs.follows = "nixpkgs";
-    
+
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
-  
-  outputs = { self, nixpkgs, spicetify-nix, awww, zen-browser, quickshell, nix-gaming, home-manager, ... } @ inputs:
+
+  outputs = inputs@{ nixpkgs, home-manager, ... }:
   let
     lib = nixpkgs.lib;
-    vars = import ./modules/core/vars.nix { inherit lib; };
+    system = "x86_64-linux";
+
+    mkHost = hostname: username: machineType:
+      nixpkgs.lib.nixosSystem {
+        inherit system;
+
+        specialArgs = {
+          inherit inputs hostname username machineType;
+        };
+
+        modules = [
+          {
+            nixpkgs.config.allowUnfree = true;
+          }
+          ./hosts/${machineType}/default.nix
+          home-manager.nixosModules.home-manager
+{
+  home-manager.useGlobalPkgs = true;
+  home-manager.useUserPackages = true;
+
+  home-manager.extraSpecialArgs = {
+    inherit inputs hostname username;
+  };
+
+  home-manager.users.${username} = {
+    imports = [
+      ./modules/home
+      inputs.spicetify-nix.homeManagerModules.default
+    ];
+  };
+}
+        ];
+      };
   in
   {
-    nixosConfigurations.${vars.hostname} = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
-      specialArgs = { inherit inputs vars; };
-      modules = [
-        ./configuration.nix
-        home-manager.nixosModules.home-manager
-        {
-          home-manager.useGlobalPkgs = true;
-          home-manager.useUserPackages = true;
-          home-manager.extraSpecialArgs = { inherit inputs vars; };
-          home-manager.users.${vars.username} = {
-            imports = [
-              ./modules/home/default.nix
-              spicetify-nix.homeManagerModules.default
-            ];
-          };
-        }
-      ];
-    };
+    nixosConfigurations.desktop = mkHost "desktop" "yurxi" "desktop";
+    nixosConfigurations.laptop = mkHost "laptop" "yurxi" "laptop";
   };
 }

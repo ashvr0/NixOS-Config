@@ -4,7 +4,7 @@ local mainMod = "SUPER"
 -- MY PROGRAMS
 local terminal    = "alacritty"
 local fileManager = "thunar"
-local browser = "librewolf"
+local browser     = "librewolf"
 local menu        = "rofi -show drun"
 
 -- Applications
@@ -13,15 +13,23 @@ hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd(browser))
 
 -- Window management
-local closeWindowBind = hl.bind(mainMod .. " + C", hl.dsp.window.close())
-hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))
-hl.bind(mainMod .. " + V", hl.dsp.window.float({ action = "toggle" }))
-hl.bind(mainMod .. " + SUPER_L", hl.dsp.exec_cmd(menu))
-hl.bind(mainMod .. " + P", hl.dsp.window.pseudo())
+local closeWindowBind = hl.bind(mainMod .. " + Q", hl.dsp.window.close())
+hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))
+hl.bind(mainMod .. " + F", hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/lock.sh"))
 hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("sh -c 'grim -g \"$(slurp)\" ~/Pictures/screenshot-$(date +%F-%H%M%S).png'"))
-hl.bind(mainMod .. " + grave", hl.dsp.exec_cmd("/home/yurxi/.config/rofi/wallpaper-menu.sh"))
+
+-- Quickshell
+hl.bind(mainMod .. " + grave", hl.dsp.exec_cmd("quickshell -p ~/.config/quickshell/WallpaperPicker.qml"))
+hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("qs ipc call network toggle"))
+hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("qs ipc call audio toggle"))
+hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("qs ipc call powermenu toggle"))
+hl.bind(mainMod .. " + C", hl.dsp.exec_cmd("qs ipc call calendar toggle"))
+hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("qs ipc call music toggle"))
+hl.bind(mainMod .. " + SUPER_L", hl.dsp.exec_cmd("qs ipc call launcher toggle"))
+hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("qs ipc call clipboard toggle"))
+
 
 -- Move focus with mainMod + arrow keys
 hl.bind(mainMod .. " + left",  hl.dsp.focus({ direction = "left" }))

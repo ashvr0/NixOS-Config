@@ -1,8 +1,8 @@
-{ vars, pkgs, ... }:
+{ username, pkgs, ... }:
 {
-  users.users.${vars.username} = {
+  users.users.${username} = {
     isNormalUser = true;
-    description = "Grace";
+    description = username;
     extraGroups = [ "networkmanager" "wheel" "libvirtd" ];
   };
 }

@@ -16,30 +16,46 @@
       nixpkgs-fmt
     ];
 
-    plugins = with pkgs.vimPlugins; [
-      tokyonight-nvim
-      nvim-web-devicons
-      nvim-treesitter.withAllGrammars
-      lualine-nvim
-      bufferline-nvim
-      indent-blankline-nvim
-      gitsigns-nvim
-      which-key-nvim
-      nvim-tree-lua
-      telescope-nvim
-      telescope-ui-select-nvim
-      nvim-autopairs
-      comment-nvim
-      nvim-lspconfig
-      nvim-cmp
-      cmp-nvim-lsp
-      cmp-buffer
-      cmp-path
-      cmp-cmdline
-      luasnip
-      cmp_luasnip
-      friendly-snippets
-    ];
+plugins = with pkgs.vimPlugins; [
+  tokyonight-nvim
+  alpha-nvim
+  nvim-web-devicons
+
+  nvim-treesitter.withAllGrammars
+
+  telescope-nvim
+  telescope-fzf-native-nvim
+  telescope-ui-select-nvim
+
+  nvim-tree-lua
+
+  lualine-nvim
+  bufferline-nvim
+
+  gitsigns-nvim
+  which-key-nvim
+  indent-blankline-nvim
+
+  nvim-autopairs
+  comment-nvim
+
+  nvim-lspconfig
+
+  nvim-cmp
+  cmp-nvim-lsp
+  cmp-buffer
+  cmp-path
+  cmp-cmdline
+  cmp_luasnip
+
+  luasnip
+  friendly-snippets
+
+  vim-fugitive
+  plenary-nvim
+  trouble-nvim
+  todo-comments-nvim
+];
   };
 
   xdg.configFile."nvim/init.lua".source = config.lib.file.mkOutOfStoreSymlink "/etc/nixos/modules/home/nvim/init.lua";

@@ -11,36 +11,104 @@ vim.opt.spelllang = "en"
 
 vim.g.mapleader = " "
 
--- Colorscheme
-require("tokyonight").setup({
-  style = "night",
-  transparent = false,
-  terminal_colors = true,
-})
-vim.cmd[[colorscheme tokyonight]]
+-- TOKYONIGHT + MATUGEN
+local function apply_matugen_theme()
+  local path = vim.fn.stdpath("config") .. "/matugen_colors.lua"
+
+  local ok, colors = pcall(dofile, path)
+  if not ok then
+    colors = {}
+  end
+
+  require("tokyonight").setup({
+    style = "night",
+    transparent = false,
+    terminal_colors = true,
+
+    on_colors = function(c)
+      c.bg = colors.base or c.bg
+      c.bg_dark = colors.mantle or c.bg_dark
+      c.bg_float = colors.surface0 or c.bg_float
+
+      c.fg = colors.text or c.fg
+      c.fg_dark = colors.subtext0 or c.fg_dark
+      c.comment = colors.overlay1 or c.comment
+
+      c.red = colors.red or c.red
+      c.orange = colors.peach or c.orange
+      c.yellow = colors.yellow or c.yellow
+      c.green = colors.green or c.green
+      c.blue = colors.blue or c.blue
+      c.magenta = colors.mauve or c.magenta
+      c.cyan = colors.sky or c.cyan
+
+      c.border = colors.overlay0 or c.border
+    end,
+  })
+
+  vim.cmd.colorscheme("tokyonight")
+
+  pcall(function()
+    require("lualine").refresh()
+  end)
+end
+
+apply_matugen_theme()
+
+local uv = vim.uv or vim.loop
+local matugen_path = vim.fn.stdpath("config") .. "/matugen_colors.lua"
+
+local watcher = uv.new_fs_event()
+local timer
+
+watcher:start(matugen_path, {}, function()
+  if timer then
+    timer:stop()
+    timer:close()
+  end
+
+  timer = uv.new_timer()
+  timer:start(100, 0, vim.schedule_wrap(function()
+    apply_matugen_theme()
+
+    timer:stop()
+    timer:close()
+    timer = nil
+  end))
+end)
 
 -- Nvim Tree
 require("nvim-tree").setup()
-vim.keymap.set("n", "<leader>\\", ":NvimTreeToggle<CR>", { noremap = true, silent = true })
+
+vim.keymap.set(
+  "n",
+  "<leader>\\",
+  ":NvimTreeToggle<CR>",
+  { noremap = true, silent = true }
+)
 
 -- Lualine
 require("lualine").setup({
   options = {
     theme = "tokyonight",
     component_separators = "",
-    section_separators = { left = "", right = "" },
+    section_separators = {
+      left = "",
+      right = "",
+    },
     globalstatus = true,
   },
 })
 
 -- Telescope
 local builtin = require("telescope.builtin")
-vim.keymap.set("n", "<leader>ff", builtin.find_files, { desc = "Telescope find files" })
-vim.keymap.set("n", "<leader>fg", builtin.live_grep,  { desc = "Telescope live grep" })
-vim.keymap.set("n", "<leader>fb", builtin.buffers,    { desc = "Telescope buffers" })
-vim.keymap.set("n", "<leader>fh", builtin.help_tags,  { desc = "Telescope help tags" })
 
--- Alpha dashboard
+vim.keymap.set("n", "<leader>ff", builtin.find_files)
+vim.keymap.set("n", "<leader>fg", builtin.live_grep)
+vim.keymap.set("n", "<leader>fb", builtin.buffers)
+vim.keymap.set("n", "<leader>fh", builtin.help_tags)
+
+-- Alpha Dashboard
 local alpha = require("alpha")
 local dashboard = require("alpha.themes.dashboard")
 
@@ -51,22 +119,16 @@ dashboard.section.header.val = {
   "██║╚██╗██║╚██╗ ██╔╝██║██║╚██╔╝██║",
   "██║ ╚████║ ╚████╔╝ ██║██║ ╚═╝ ██║",
   "╚═╝  ╚═══╝  ╚═══╝  ╚═╝╚═╝     ╚═╝",
+  "",
 }
 
 dashboard.section.buttons.val = {
-  dashboard.button("e", "  󰈔 New file",     ":ene <BAR> startinsert <CR>"),
-  dashboard.button("r", "  󱁚 Recent files", ":Telescope oldfiles<CR>"),
-  dashboard.button("t", "  󰈞 Find file",    ":Telescope find_files<CR>"),
-  dashboard.button("q", "  󰅖 Quit",         ":qa<CR>"),
-}
-
-dashboard.config.layout = {
-  { type = "padding", val = vim.fn.max { 2, vim.fn.floor(vim.fn.winheight(0) * 0.2) } },
-  dashboard.section.header,
-  { type = "padding", val = 5 },
-  dashboard.section.buttons,
-  { type = "padding", val = 3 },
-  dashboard.section.footer,
+  dashboard.button("f", " Find file", "<cmd>Telescope find_files<CR>"),
+  dashboard.button("g", " Live grep", "<cmd>Telescope live_grep<CR>"),
+  dashboard.button("r", " Recent files", "<cmd>Telescope oldfiles<CR>"),
+  dashboard.button("e", " New file", "<cmd>ene<CR>"),
+  dashboard.button("q", " Quit", "<cmd>qa<CR>"),
 }
 
 alpha.setup(dashboard.config)
+

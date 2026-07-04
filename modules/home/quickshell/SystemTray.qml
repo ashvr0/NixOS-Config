@@ -6,17 +6,12 @@ Item {
   id: root
   implicitWidth: pillBg.width
   implicitHeight: pillBg.height
-
   property int cascadeIndex: 4
-
-  // ── Entrance ────────────────────────────────────────────────────────
   property bool entered: false
   Timer { interval: 200 + root.cascadeIndex * 80; running: true; onTriggered: root.entered = true }
   opacity: entered ? 1 : 0
   transform: Translate { y: root.entered ? 0 : 14; Behavior on y { NumberAnimation { duration: 450; easing.type: Easing.OutBack } } }
   Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
-
-  // hide the whole pill cleanly when nothing is in the tray
   visible: pillBg.width > 0
 
   Rectangle {
@@ -24,7 +19,7 @@ Item {
     height: 50
     width: SystemTray.items.values.length > 0 ? trayRow.implicitWidth + 20 : 0
     radius: 14
-    color: Qt.rgba(0.118, 0.118, 0.180, 0.75)
+    color: Qt.rgba(MatugenColors.bgBase.r, MatugenColors.bgBase.g, MatugenColors.bgBase.b, 0.75)
     border.color: Qt.rgba(1, 1, 1, 0.06)
     border.width: 1
     anchors.verticalCenter: parent.verticalCenter

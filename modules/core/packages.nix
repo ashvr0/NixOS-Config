@@ -1,4 +1,3 @@
-
 { config, pkgs, inputs, ... }:
 let
   system = pkgs.stdenv.hostPlatform.system;
@@ -26,7 +25,7 @@ in
 
       # Networking and security
       proton-vpn
-      librewolf
+      openvpn
 
       # Media tools
       vlc
@@ -35,13 +34,10 @@ in
       obsidian
 
       # Wayland and Hyprland ecosystem
-      hyprlock
       hypridle
-      eww
       slurp
       grim
-      rofi
-      nwg-look
+      cliphist
 
       # Terminal and shell
       alacritty
@@ -59,6 +55,10 @@ in
       gnumake
       pkg-config
       yazi
+      thunar
+      unzip
+      libreoffice
+      librewolf 
       
       # Graphics and rendering
       mesa
@@ -68,18 +68,16 @@ in
       # Theming and icons
       papirus-icon-theme
       nordic
-      pywal16
       matugen
-      
+      nwg-look
+
       # fun tools
       fastfetch
       cbonsai
       cmatrix
       cava
       peaclock
-
-      # File management
-      thunar
-      unzip
+      lavat
+      prismlauncher
     ]);
 }
