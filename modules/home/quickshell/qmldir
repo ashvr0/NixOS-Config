@@ -1,0 +1,20 @@
+singleton Config 1.0 Config.qml
+singleton MatugenColors 1.0 MatugenColors.qml
+
+Bar 1.0 Bar.qml
+Launcher 1.0 Launcher.qml
+Clipboard 1.0 Clipboard.qml
+Notification 1.0 Notification.qml
+Workspaces 1.0 Workspaces.qml
+MusicPlayer 1.0 MusicPlayer.qml
+SystemStats 1.0 SystemStats.qml
+SystemTray 1.0 SystemTray.qml
+Scaler 1.0 Scaler.qml
+Power 1.0 Power.qml
+Settings 1.0 Settings.qml
+Audio 1.0 Audio.qml
+Bluetooth 1.0 Bluetooth.qml
+Calendar 1.0 Calendar.qml
+Keyboard 1.0 Keyboard.qml
+Network 1.0 Network.qml
+BarModulePill 1.0 BarModulePill.qml

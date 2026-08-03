@@ -1,0 +1,3 @@
+active_border1 = "rgba({{colors.primary.default.hex_stripped}}ee)"
+active_border2 = "rgba({{colors.tertiary.default.hex_stripped}}ee)"
+inactive_border = "rgba({{colors.outline.default.hex_stripped}}aa)"

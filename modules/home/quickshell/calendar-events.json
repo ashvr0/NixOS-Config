@@ -1,0 +1,20 @@
+{
+  "events": [
+    {
+      "id": "ev_1785719455520_89209",
+      "title": "tre",
+      "allDay": false,
+      "startDate": "2026-08-02",
+      "endDate": "2026-08-02",
+      "startMin": 540,
+      "endMin": 600,
+      "color": "#387171",
+      "notes": "",
+      "travelTime": 0,
+      "repeat": {
+        "freq": "none"
+      },
+      "reminders": []
+    }
+  ]
+}
