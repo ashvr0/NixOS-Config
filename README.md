@@ -7,14 +7,17 @@
 
 </div>
 
+
+# Previews
+
 # Overview
 - Window manager: Hyprland
-- Shell UI: quickshell
+- Shell: quickshell
 - Terminal: alacritty
 - Shell: fish
 - File manager: thunar
 - Browser: librewolf
-- Launcher: rofi
+- Launcher: quickshell
 - Colors: matugen generated from wallpaper
 - Font: JetBrains Mono Nerd Font
 ## Keybinds

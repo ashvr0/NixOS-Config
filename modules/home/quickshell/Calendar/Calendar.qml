@@ -1,18 +1,13 @@
+import "../Singletons"
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import ".."
 
 Item {
   id: root
-
-IpcHandler {
-    target: "calendar"
-    function toggle(): void {
-      calPopup.toggle()
-    }
-  }
 
 component TextField : Rectangle {
   id: field
@@ -550,16 +545,28 @@ component DateTimeField : Item {
   }
 }
 
-  implicitWidth: col.implicitWidth + s(16)
-  implicitHeight: parent ? parent.height : s(50)
+
+IpcHandler {
+    enabled: root.visible
+    target: "calendar"
+    function toggle(): void {
+      calPopup.toggle()
+    }
+  }
+
+
+  property bool vertical: Config.barVertical
+  property real counterRotation: vertical ? (Config.barPosition === "left" ? 90 : -90) : 0
+
+  implicitWidth: vertical ? s(50) : (col.implicitWidth + s(16))
+  implicitHeight: vertical ? (colVertical.implicitHeight + s(16)) : (parent ? parent.height : s(50))
   property alias calendarOpen: calPopup.calendarOpen
 
-  Scaler {
-    id: scaler
-    currentWidth: Screen.width
-    currentHeight: Screen.height
+  Component.onCompleted: {
+    Scaler.currentWidth = Screen.width
+    Scaler.currentHeight = Screen.height
   }
-  function s(val) { return scaler.s(val) }
+  function s(val) { return Scaler.s(val) }
 
   property int cascadeIndex: 3
   property bool entered: false
@@ -607,8 +614,6 @@ component DateTimeField : Item {
           }
         }
       } catch (e) {
-        // Corrupt or missing file: start with an empty event list rather
-        // than crashing the calendar.
       }
       eventStore.loaded = true
     }
@@ -742,18 +747,17 @@ component DateTimeField : Item {
     watchChanges: false
     onLoaded: eventStore._load()
     onLoadFailed: function(error) {
-      // File doesn't exist yet on first run: treat as an empty event list
-      // rather than leaving eventStore stuck in an unloaded state.
       eventStore.loaded = true
     }
     Component.onCompleted: reload()
   }
 
-  // Clock content
+  // Clock content (horizontal bar)
   Column {
     id: col
     anchors.centerIn: parent
     spacing: 2
+    visible: !root.vertical
 
     Text {
       text: {
@@ -770,6 +774,61 @@ component DateTimeField : Item {
 
     Text {
       text: Qt.formatDateTime(clock.date, "ddd MMM d")
+      color: calPopup.calendarOpen ? MatugenColors.accent : MatugenColors.textMuted
+      font.pixelSize: s(10)
+      font.family: "JetBrainsMono Nerd Font"
+      anchors.horizontalCenter: parent.horizontalCenter
+      Behavior on color { ColorAnimation { duration: 200 } }
+    }
+  }
+
+  // Clock content (vertical bar): stack each component, unrotated
+  Column {
+    id: colVertical
+    anchors.centerIn: parent
+    spacing: 3
+    visible: root.vertical
+
+    Text {
+      text: Qt.formatDateTime(clock.date, Config.clock24h ? "hh" : "h")
+      color: MatugenColors.text
+      font.pixelSize: s(13)
+      font.weight: Font.Bold
+      font.family: "JetBrainsMono Nerd Font"
+      anchors.horizontalCenter: parent.horizontalCenter
+    }
+    Text {
+      text: Qt.formatDateTime(clock.date, "mm")
+      color: MatugenColors.text
+      font.pixelSize: s(13)
+      font.weight: Font.Bold
+      font.family: "JetBrainsMono Nerd Font"
+      anchors.horizontalCenter: parent.horizontalCenter
+    }
+    Text {
+      visible: Config.showClockSeconds
+      text: Qt.formatDateTime(clock.date, "ss")
+      color: MatugenColors.textMuted
+      font.pixelSize: s(11)
+      font.family: "JetBrainsMono Nerd Font"
+      anchors.horizontalCenter: parent.horizontalCenter
+    }
+    Rectangle {
+      width: s(14); height: 1
+      color: MatugenColors.textMuted
+      opacity: 0.4
+      anchors.horizontalCenter: parent.horizontalCenter
+    }
+    Text {
+      text: Qt.formatDateTime(clock.date, "d")
+      color: calPopup.calendarOpen ? MatugenColors.accent : MatugenColors.textMuted
+      font.pixelSize: s(11)
+      font.family: "JetBrainsMono Nerd Font"
+      anchors.horizontalCenter: parent.horizontalCenter
+      Behavior on color { ColorAnimation { duration: 200 } }
+    }
+    Text {
+      text: Qt.formatDateTime(clock.date, "MMM")
       color: calPopup.calendarOpen ? MatugenColors.accent : MatugenColors.textMuted
       font.pixelSize: s(10)
       font.family: "JetBrainsMono Nerd Font"
@@ -867,11 +926,11 @@ component DateTimeField : Item {
         else if (dayPanel.selectedDate !== "") dayPanel.selectedDate = ""
         else calPopup.close()
       }
-    // popup
+      // Popup Menu
       Rectangle {
         id: calCard
-        width: s(685)
-        x: Config.barPosition === "left" ? s(8) : (Screen.width - width - s(8))
+        width: s(720)
+        x: Config.barPosition === "left" ? s(80) : (Config.barPosition === "right" ? (Screen.width - width - s(80)) : (Screen.width - width - s(8)))
         y: Config.barPosition === "bottom" ? (Screen.height - height - s(70)) : s(70)
         radius: s(10)
         clip: true
@@ -895,12 +954,11 @@ component DateTimeField : Item {
           anchors.fill: parent
           anchors.margins: s(16)
           spacing: s(16)
-          // calaendar side
           Column {
             id: calSide
             width: s(320)
             spacing: s(12)
-            property string zoomLevel: "day" // "day" | "months" | "years"
+            property string zoomLevel: "day"
             readonly property int minYear: 1970
             readonly property int maxYear: 2100
 
@@ -1190,7 +1248,7 @@ component DateTimeField : Item {
                 }
               }
             }
-          } // end monthsGrid
+          }
 
           GridLayout {
             id: yearsGrid
@@ -1204,11 +1262,6 @@ component DateTimeField : Item {
             height: calSide.zoomLevel === "years" ? implicitHeight : 0
             Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
             Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-
-            // Base of the visible 12-year block. Reset relative to the
-            // current view year whenever the years grid is opened, so it
-            // always centers on wherever the user currently is instead of
-            // drifting from a stale value left over from a previous visit.
             property int startYear: calGrid.viewYear - (calGrid.viewYear % 12)
 
             WheelHandler {
@@ -1253,9 +1306,8 @@ component DateTimeField : Item {
                 }
               }
             }
-          } // end yearsGrid
-
-          } // end calSide
+          }
+          }
 
           Column {
             id: daySide
@@ -1336,12 +1388,6 @@ component DateTimeField : Item {
                             elide: Text.ElideRight
                             maximumLineCount: 1
                           }
-
-                          // Right-edge fade: only shown when the title is
-                          // actually being truncated, so short titles stay
-                          // crisp. Fades to the card's own background color
-                          // rather than to transparent, since the card
-                          // itself is a solid color block.
                           Rectangle {
                             visible: titleText.truncated
                             anchors.right: parent.right
@@ -1392,7 +1438,7 @@ component DateTimeField : Item {
                     visible: dayPanel.mode === "list" && eventStore.eventsForDate(dayPanel.selectedDate).length === 0
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
-                    text: "No events"
+                    text: "No upcomming events"
                     color: MatugenColors.textMuted
                     font.pixelSize: s(10)
                     font.family: "JetBrainsMono Nerd Font"
@@ -1419,12 +1465,7 @@ component DateTimeField : Item {
                     property int travelTime: 0
                     property string repeatFreq: "none"
                     property string repeatCustomText: ""
-
                     readonly property int maxReminders: 10
-
-                    // Canonical top-to-bottom ordering: at time of event,
-                    // 5/10/15/30 min, 1/2 hr, 1/2 day, 1 week. Reminders
-                    // auto-sort into this order whenever one is set.
                     readonly property var sortOrder: [
                       "minutes:0", "minutes:5", "minutes:10", "minutes:15", "minutes:30",
                       "hours:1", "hours:2", "days:1", "days:2", "weeks:1",
@@ -1449,20 +1490,11 @@ component DateTimeField : Item {
                       }
                       return out
                     }
-
-                    // Number of AlertField rows to actually show: every
-                    // set reminder, plus exactly one empty slot after them
-                    // (to set the next one), capped at maxReminders. This
-                    // is what makes a new empty alert appear only after
-                    // the previous one is set, instead of showing all 10
-                    // slots up front.
                     readonly property int visibleReminderSlots: Math.min(editForm.maxReminders, editForm.reminders.length + 1)
 
                     function setReminderAt(idx, r) {
                       var list = editForm.reminders.slice()
                       if (r === null) {
-                        // Clearing a slot removes it (and anything after
-                        // it collapses up), rather than leaving a gap.
                         list.splice(idx, 1)
                       } else if (idx < list.length) {
                         list[idx] = r
@@ -1860,10 +1892,6 @@ component DateTimeField : Item {
                           }
                         }
                       }
-
-                      // Custom-color swatch: shows the current color when
-                      // it's not one of the defaults, otherwise acts as a
-                      // plain "+" button to open the picker.
                       Rectangle {
                         id: customSwatch
                         readonly property bool isCustomActive: eventStore.palette.indexOf(editForm.color) === -1
@@ -2113,9 +2141,8 @@ component DateTimeField : Item {
                 }
               }
             }
-          } // end dayPanel Item
-
-          } // end daySide
+          }
+          }
         }
       }
     }

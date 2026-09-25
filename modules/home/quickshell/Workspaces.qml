@@ -1,32 +1,36 @@
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import "Singletons"
 
 Item {
     id: root
 
-    Scaler {
-        id: scaler
-        currentWidth: Screen.width
-        currentHeight: Screen.height
-    }
+    Component.onCompleted: {
+    Scaler.currentWidth = Screen.width
+    Scaler.currentHeight = Screen.height
+}
 
     function s(val) {
-        return scaler.s(val)
+        return Scaler.s(val)
     }
 
     implicitWidth: pillBg.width
     implicitHeight: pillBg.height
 
+    property bool vertical: Config.barVertical
     property int cascadeIndex: 0
     property int wsCount: Config.workspaceCount
+    property bool orbStyle: Config.workspaceStyle === "orbs"
 
-    property int pillH: s(36)
-    property int spacing: s(6)
-    property int padding: s(20)
-    property int radius: s(14)
-    property int buttonRadius: s(10)
+    property int pillH: orbStyle ? s(28) : s(36)
+    property int spacing: orbStyle ? s(10) : s(6)
+    property int padding: orbStyle ? s(16) : s(20)
+    property int radius: s(Config.uiRadius)
+    property int buttonRadius: s(Math.max(0, Config.uiRadius - 4))
     property int fontSize: s(13)
+    property int orbSize: s(8)
+    property int orbSizeActive: s(10)
 
     property int step: pillH + spacing
 
@@ -61,15 +65,14 @@ Item {
     Rectangle {
         id: pillBg
 
-        height: s(50)
-        width: wsLayout.implicitWidth + root.padding
+        height: root.vertical ? (wsLayout.height + root.padding) : s(50)
+        width: root.vertical ? s(50) : (wsLayout.width + root.padding)
         radius: root.radius
 
         color: Qt.rgba(
             MatugenColors.bgBase.r,
             MatugenColors.bgBase.g,
             MatugenColors.bgBase.b,
-            0.75
         )
 
         border.color: Qt.rgba(1, 1, 1, 0.06)
@@ -80,11 +83,11 @@ Item {
         Rectangle {
             id: activeHighlight
 
-            y: (pillBg.height - root.pillH) / 2
-            width: root.pillH
-            height: root.pillH
-            radius: root.buttonRadius
+            width: root.orbStyle ? root.orbSizeActive : (root.vertical ? root.pillH : root.pillH)
+            height: root.orbStyle ? root.orbSizeActive : root.pillH
+            radius: root.orbStyle ? width / 2 : root.buttonRadius
 
+            visible: !root.orbStyle
             color: MatugenColors.accent
             z: 0
 
@@ -108,18 +111,17 @@ Item {
                 return focusedId - 1
             }
 
-            Connections {
-                target: Hyprland.workspaces
-                function onValuesChanged() {
-                    activeHighlight.x = Qt.binding(function() {
-                        return wsLayout.x + activeHighlight.curIdx * root.step
-                    })
+            x: root.vertical ? (pillBg.width - root.pillH) / 2 : (wsLayout.x + curIdx * root.step)
+            y: root.vertical ? (wsLayout.y + curIdx * root.step) : (pillBg.height - root.pillH) / 2
+
+            Behavior on x {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutExpo
                 }
             }
 
-            x: wsLayout.x + curIdx * root.step
-
-            Behavior on x {
+            Behavior on y {
                 NumberAnimation {
                     duration: 250
                     easing.type: Easing.OutExpo
@@ -132,47 +134,69 @@ Item {
                     easing.type: Easing.OutExpo
                 }
             }
+
+            Behavior on height {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutExpo
+                }
+            }
         }
 
-        Row {
+        Flow {
             id: wsLayout
 
-            anchors.centerIn: parent
+            x: (pillBg.width - width) / 2
+            y: (pillBg.height - height) / 2
+            width: root.vertical ? root.pillH : (root.wsCount * root.step - root.spacing)
+            height: root.vertical ? (root.wsCount * root.step - root.spacing) : root.pillH
             spacing: root.spacing
+            flow: root.vertical ? Flow.TopToBottom : Flow.LeftToRight
 
             Repeater {
                 model: root.wsCount
+                delegate: wsButtonComponent
+            }
+        }
+
+        Component {
+            id: wsButtonComponent
+
+            Item {
+                id: wsButton
+
+                property bool isFocused: Hyprland.focusedWorkspace
+                    && Hyprland.focusedWorkspace.id === (index + 1)
+
+                property bool isOccupied: {
+                    var list = Hyprland.workspaces.values
+                    for (var i = 0; i < list.length; i++) {
+                        if (list[i].id === (index + 1))
+                            return true
+                    }
+                    return false
+                }
+
+                property bool isHovered: wsMouse.containsMouse
+
+                width: root.pillH
+                height: root.pillH
+
+                scale: (!root.orbStyle && isHovered && !isFocused) ? 1.1 : 1.0
+
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 250
+                        easing.type: Easing.OutCubic
+                    }
+                }
 
                 Rectangle {
-                    id: wsButton
-
-                    width: root.pillH
-                    height: root.pillH
+                    id: numberBg
+                    visible: !root.orbStyle
+                    anchors.fill: parent
                     radius: root.buttonRadius
                     color: "transparent"
-
-                    property bool isFocused: Hyprland.focusedWorkspace
-                        && Hyprland.focusedWorkspace.id === (index + 1)
-
-                    property bool isOccupied: {
-                        var list = Hyprland.workspaces.values
-                        for (var i = 0; i < list.length; i++) {
-                            if (list[i].id === (index + 1))
-                                return true
-                        }
-                        return false
-                    }
-
-                    property bool isHovered: wsMouse.containsMouse
-
-                    scale: isHovered && !isFocused ? 1.1 : 1.0
-
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.OutCubic
-                        }
-                    }
 
                     Text {
                         anchors.centerIn: parent
@@ -199,18 +223,72 @@ Item {
                             }
                         }
                     }
+                }
 
-                    MouseArea {
-                        id: wsMouse
+                Rectangle {
+                    id: orb
+                    visible: root.orbStyle
+                    anchors.centerIn: parent
+                    width: wsButton.isFocused ? (root.pillH - s(6)) : (wsButton.isOccupied ? s(10) : s(6))
+                    height: wsButton.isFocused ? s(10) : (wsButton.isOccupied ? s(10) : s(6))
+                    radius: height / 2
 
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-
-                        onClicked: Hyprland.dispatch(
-                            "hl.dsp.focus({workspace=" + (index + 1) + "})"
-                        )
+                    Behavior on width {
+                        NumberAnimation { duration: 320; easing.type: Easing.OutExpo }
                     }
+                    Behavior on height {
+                        NumberAnimation { duration: 320; easing.type: Easing.OutExpo }
+                    }
+
+                    color: wsButton.isFocused
+                        ? MatugenColors.accent
+                        : (wsButton.isOccupied
+                            ? Qt.rgba(MatugenColors.text.r, MatugenColors.text.g, MatugenColors.text.b, 0.5)
+                            : Qt.rgba(MatugenColors.text.r, MatugenColors.text.g, MatugenColors.text.b, 0.2))
+
+                    Behavior on color { ColorAnimation { duration: 200 } }
+
+                    Rectangle {
+                        visible: wsButton.isFocused
+                        anchors.fill: parent
+                        anchors.margins: -1
+                        radius: parent.radius + 1
+                        color: "transparent"
+                        border.width: 1
+                        border.color: Qt.rgba(MatugenColors.text.r, MatugenColors.text.g, MatugenColors.text.b, 0.2)
+                    }
+
+                    Rectangle {
+                        id: glowRing
+                        visible: wsButton.isFocused
+                        anchors.centerIn: parent
+                        width: parent.width + 4
+                        height: parent.height + 4
+                        radius: height / 2
+                        color: "transparent"
+                        border.width: 2
+                        border.color: Qt.rgba(MatugenColors.accent.r, MatugenColors.accent.g, MatugenColors.accent.b, 0.15)
+
+                        SequentialAnimation on opacity {
+                            running: wsButton.isFocused
+                            loops: Animation.Infinite
+
+                            NumberAnimation { to: 0.3; duration: 1500; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: 0.8; duration: 1500; easing.type: Easing.InOutSine }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: wsMouse
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+
+                    onClicked: Hyprland.dispatch(
+                        "hl.dsp.focus({workspace=" + (index + 1) + "})"
+                    )
                 }
             }
         }

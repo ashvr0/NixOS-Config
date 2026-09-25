@@ -10,8 +10,6 @@
       "1.0.0.1"
     ];
 
-    firewall = {
-      enable = true;
-    };
+    firewall.enable = true;
   };
 }

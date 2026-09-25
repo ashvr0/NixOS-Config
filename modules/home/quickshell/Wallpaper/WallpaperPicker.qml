@@ -5,11 +5,18 @@ import Qt.labs.folderlistmodel
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import "."
+import ".."
+import "../Singletons"
 
-ShellRoot {
+Scope {
   id: root
-
+  IpcHandler {
+    target: "wallpaper"
+    function toggle(): void {
+      root.visible = !root.visible
+    }
+  }
+  property bool visible: false
   property string lockFile: Quickshell.env("HOME") + "/.cache/wallpaper-picker.lock"
   property string cacheDir: Quickshell.env("HOME") + "/.cache/wallpaper-picker"
   property string colorMarkerDir: root.cacheDir + "/colors"
@@ -41,7 +48,7 @@ ShellRoot {
   property var wallpapers: []
   property string currentWallpaper: ""
   property string filterText: ""
-  property string colorFilter: "" // "" = no color filter active
+  property string colorFilter: ""
   property int selectedIndex: -1
 
   readonly property var colorSwatches: [
@@ -54,29 +61,18 @@ ShellRoot {
     { name: "Pink", hex: "#FF69B4" }
   ]
 
-  // fileName -> hex string, populated from marker files dropped by
-  // colorExtractProc. Kept as a plain object so filtering is a cheap
-  // synchronous lookup instead of a query per frame.
   property var colorMap: ({})
 
   function isVideoFile(name) {
     const n = name.toLowerCase()
-    // .gif is included here (not just video containers) because swww/awww
-    // only renders a gif's first frame — mpvpaper is what actually animates it.
     return n.endsWith(".mp4") || n.endsWith(".mkv") || n.endsWith(".webm") || n.endsWith(".mov") || n.endsWith(".gif")
   }
 
-  // Distinguishes true video containers from gifs: gifs get a native Image
-  // thumbnail (Qt decodes frame 0 directly), containers need an ffmpeg-
-  // extracted poster frame since there's no in-process video decoder.
   function isVideoContainerFile(name) {
     const n = name.toLowerCase()
     return n.endsWith(".mp4") || n.endsWith(".mkv") || n.endsWith(".webm") || n.endsWith(".mov")
   }
 
-  // Reads the directory in-process, no bash/ls/grep spawn, so the list
-  // is ready as soon as the folder is stat'd instead of waiting on a
-  // subprocess round trip.
   FolderListModel {
     id: folderModel
     folder: "file://" + root.wallpaperDir
@@ -98,8 +94,6 @@ ShellRoot {
     }
   }
 
-  // Marker files are named "<wallpaperFileName>.hex" containing a single
-  // hex color line. A background script owns writing these; we only read.
   FolderListModel {
     id: colorMarkerModel
     folder: "file://" + root.colorMarkerDir
@@ -116,21 +110,14 @@ ShellRoot {
     const map = {}
     for (let i = 0; i < colorMarkerModel.count; i++) {
       const markerName = colorMarkerModel.get(i, "fileName")
-      const wallpaperName = markerName.slice(0, -4) // strip ".hex"
+      const wallpaperName = markerName.slice(0, -4)
       map[wallpaperName] = colorMarkerFileContents[markerName] || ""
     }
-    // Contents are filled in asynchronously by the FileView Repeater
-    // below; this pass just tracks which marker files currently exist
-    // and queues any we haven't read yet.
     root.colorMap = Object.assign({}, root.colorMap, map)
     root.readColorMarkerContents()
   }
 
   property var colorMarkerFileContents: ({})
-
-  // One-shot background pipeline: for every wallpaper missing a marker
-  // file, sample a resized 1x1 pixel and write its hex. Runs after any
-  // folder change so new wallpapers eventually get filterable.
   Process {
     id: colorExtractProc
     command: ["bash", "-c", `
@@ -145,24 +132,30 @@ ShellRoot {
         case "$base" in *.mp4|*.mkv|*.webm|*.mov) continue ;; esac
         marker="$OUT/$base.hex"
         [ -f "$marker" ] && continue
-        hex=$($CMD "$f" -resize 1x1^ -gravity center -extent 1x1 -depth 8 -format "%[hex:p{0,0}]" info:- 2>/dev/null)
-        [ -n "$hex" ] && echo "#$hex" > "$marker"
+        $CMD "$f" -resize 128x128 -colors 10 -depth 8 -format "%c" histogram:info:- 2>/dev/null \
+          | sort -rn \
+          | grep -oE '#[0-9A-Fa-f]{6}' \
+          | head -8 \
+          | tr '\n' ',' > "$marker"
       done
     `]
   }
 
-  // One-shot background pipeline: extracts a single poster frame per video
-  // container into posterDir so the picker can show a real thumbnail
-  // without QtMultimedia. Skips files that already have a poster so repeat
-  // runs (e.g. after adding one new video) stay cheap.
   Process {
     id: posterExtractProc
+    property bool rerunPending: false
     command: ["bash", "-c", `
       set -f
       SRC="${root.wallpaperDir}"
       OUT="${root.posterDir}"
       mkdir -p "$OUT"
-      command -v ffmpeg >/dev/null 2>&1 || exit 0
+      echo "[WallpaperPicker] poster scan starting, SRC=$SRC OUT=$OUT" >&2
+      if ! command -v ffmpeg >/dev/null 2>&1; then
+        echo "[WallpaperPicker] ffmpeg not found on PATH, cannot generate video thumbnails" >&2
+        exit 0
+      fi
+      count=0
+      made=0
       for f in "$SRC"/*; do
         [ -f "$f" ] || continue
         base=$(basename "$f")
@@ -170,26 +163,78 @@ ShellRoot {
           *.mp4|*.mkv|*.webm|*.mov) ;;
           *) continue ;;
         esac
+        count=$((count+1))
         poster="$OUT/$base.jpg"
-        [ -f "$poster" ] && continue
-        ffmpeg -y -loglevel error -ss 00:00:01 -i "$f" -frames:v 1 -vf "scale=480:-1" "$poster" 2>/dev/null
+        if [ -f "$poster" ]; then
+          continue
+        fi
+        if ! ffmpeg -y -loglevel error -ss 00:00:01 -i "$f" -frames:v 1 -vf "scale=480:-1" "$poster" 2>/tmp/ffmpeg-poster-err.log; then
+          echo "[WallpaperPicker] poster failed for $base: $(cat /tmp/ffmpeg-poster-err.log)" >&2
+          rm -f "$poster"
+        elif [ ! -s "$poster" ]; then
+          echo "[WallpaperPicker] poster empty for $base, retrying at 0s" >&2
+          rm -f "$poster"
+          ffmpeg -y -loglevel error -ss 00:00:00 -i "$f" -frames:v 1 -vf "scale=480:-1" "$poster" 2>>/tmp/ffmpeg-poster-err.log
+          [ -s "$poster" ] || echo "[WallpaperPicker] poster still failed for $base at 0s: $(cat /tmp/ffmpeg-poster-err.log)" >&2
+        fi
+        [ -s "$poster" ] && made=$((made+1))
       done
+      echo "[WallpaperPicker] poster scan done, found $count video files, generated/verified $made posters" >&2
     `]
-    onRunningChanged: if (!running) root.posterCacheVersion++
+    onRunningChanged: {
+      if (!running) {
+        root.posterCacheVersion++
+        if (posterExtractProc.rerunPending) {
+          posterExtractProc.rerunPending = false
+          posterExtractProc.running = true
+        }
+      }
+    }
   }
-
-  // Bumped after each poster-extraction pass; referenced (but not used
-  // directly) by delegate Image.source bindings so QML re-evaluates
-  // whether a poster file now exists instead of caching a failed load.
   property int posterCacheVersion: 0
 
-  function loadPosters() { posterExtractProc.running = true }
+  function loadPosters() {
+    if (posterExtractProc.running) {
+      posterExtractProc.rerunPending = true
+    } else {
+      posterExtractProc.running = true
+    }
+  }
+
+  // Per-selection snapshot: grab a poster for the file being applied right now,
+  // instead of waiting for the batch posterExtractProc to eventually reach it.
+  Process {
+    id: selectionSnapshotProc
+    property string targetFile: ""
+    onRunningChanged: {
+      if (!running && selectionSnapshotProc.targetFile !== "") {
+        selectionSnapshotProc.targetFile = ""
+        root.posterCacheVersion++
+      }
+    }
+  }
+
+  function snapshotSelectedVideo(filename) {
+    const fullPath = root.wallpaperDir + "/" + filename
+    const poster = root.posterDir + "/" + filename + ".jpg"
+    selectionSnapshotProc.targetFile = filename
+    selectionSnapshotProc.command = ["bash", "-c", `
+      set -f
+      SRC="$1"
+      OUT="$2"
+      mkdir -p "$(dirname "$OUT")"
+      if [ -f "$OUT" ]; then exit 0; fi
+      if ! ffmpeg -y -loglevel error -ss 00:00:01 -i "$SRC" -frames:v 1 -vf "scale=480:-1" "$OUT" 2>/tmp/ffmpeg-selection-err.log; then
+        rm -f "$OUT"
+      elif [ ! -s "$OUT" ]; then
+        rm -f "$OUT"
+        ffmpeg -y -loglevel error -ss 00:00:00 -i "$SRC" -frames:v 1 -vf "scale=480:-1" "$OUT" 2>>/tmp/ffmpeg-selection-err.log
+      fi
+    `, "_", fullPath, poster]
+    selectionSnapshotProc.running = true
+  }
 
   function readColorMarkerContents() {
-    // Rebuild the list of markers pending a read; the actual reading is
-    // done by the colorMarkerReader Repeater below using FileView, which
-    // is a documented, synchronous-enough API — not a dynamically
-    // constructed Process per file (that path was unreliable in practice).
     const pending = []
     for (let i = 0; i < colorMarkerModel.count; i++) {
       const markerName = colorMarkerModel.get(i, "fileName")
@@ -199,11 +244,6 @@ ShellRoot {
   }
 
   property var pendingColorMarkers: []
-
-  // One FileView per pending marker file, each reading its single hex
-  // line. Repeater instances are cheap and short-lived: once a marker's
-  // content is captured into colorMap, it drops out of pendingColorMarkers
-  // and this delegate is destroyed.
   Repeater {
     model: root.pendingColorMarkers
     delegate: FileView {
@@ -215,7 +255,7 @@ ShellRoot {
       Component.onCompleted: {
         const hex = text().trim()
         if (hex) {
-          const wallpaperName = modelData.slice(0, -4) // strip ".hex"
+          const wallpaperName = modelData.slice(0, -4)
           root.colorMap = Object.assign({}, root.colorMap, { [wallpaperName]: hex })
           root.colorMarkerFileContents = Object.assign({}, root.colorMarkerFileContents, { [modelData]: hex })
         }
@@ -233,7 +273,7 @@ ShellRoot {
     const max = Math.max(r, g, b), min = Math.min(r, g, b)
     const d = max - min
     const v = max, s = max === 0 ? 0 : d / max
-    if (s < 0.12 || v < 0.1) return ""
+    if (s < 0.15 || v < 0.08) return ""
     let hue = 0
     if (d !== 0) {
       if (max === r) hue = ((g - b) / d) % 6
@@ -244,15 +284,22 @@ ShellRoot {
     }
     if (hue >= 345 || hue < 15) return "Red"
     if (hue < 45) return "Orange"
-    if (hue < 75) return "Yellow"
-    if (hue < 165) return "Green"
+    if (hue < 70) return "Yellow"
+    if (hue < 170) return "Green"
     if (hue < 260) return "Blue"
-    if (hue < 315) return "Purple"
+    if (hue < 320) return "Purple"
     return "Pink"
   }
 
-  // Rebuilds only added/removed entries instead of recreating the whole
-  // list, which is what was causing thumbnails to unload while scrolling.
+  function wallpaperHasColor(paletteStr, colorName) {
+    if (!paletteStr) return false
+    const hexes = paletteStr.split(",").map(s => s.trim()).filter(Boolean)
+    for (const hex of hexes) {
+      if (root.hexToColorName(hex) === colorName) return true
+    }
+    return false
+  }
+
   ScriptModel {
     id: filteredModel
     values: {
@@ -260,7 +307,7 @@ ShellRoot {
       let list = root.wallpapers
       if (f !== "") list = list.filter(w => w.toLowerCase().indexOf(f) !== -1)
       if (root.colorFilter !== "") {
-        list = list.filter(w => root.hexToColorName(root.colorMap[w]) === root.colorFilter)
+        list = list.filter(w => root.wallpaperHasColor(root.colorMap[w], root.colorFilter))
       }
       return list
     }
@@ -284,11 +331,6 @@ ShellRoot {
       root.selectedIndex = -1
     }
   }
-
-  // ---- Session restore ----
-  // Each launch is a fresh process (spawned by a keybind), so nothing in
-  // QML property state survives between opens — we persist to a real
-  // JSON file on disk and reload it at startup.
   FileView {
     id: sessionFile
     path: root.cacheDir + "/session.json"
@@ -301,10 +343,6 @@ ShellRoot {
       property string colorFilter: ""
       property string lastSelectedName: ""
     }
-
-    // Missing file on first run is expected; FileView already skips
-    // logging known errors when printErrors is false, so just disable
-    // the automatic warning rather than filtering error types ourselves.
     printErrors: false
   }
 
@@ -332,8 +370,6 @@ ShellRoot {
       root._pendingRestoreName = ""
     }
   }
-
-  // ---- Multi-monitor ----
   ListModel { id: monitorModel }
 
   Process {
@@ -376,7 +412,6 @@ ShellRoot {
     }
   }
 
-  // ---- Apply wallpaper (image or video) ----
   function applyWallpaper(filename) {
     const outputs = root.selectedMonitorOutputs()
     if (outputs === "none") return
@@ -387,11 +422,12 @@ ShellRoot {
     const escPath = escapeBash(fullPath)
     const escOutputs = escapeBash(outputs)
 
+    if (root.isVideoContainerFile(filename)) {
+      root.snapshotSelectedVideo(filename)
+    }
+
     let wallpaperCmd
     if (root.isVideoFile(filename)) {
-      // mpvpaper never returns on its own while it's painting the
-      // wallpaper, so it must always be backgrounded with `&` or the
-      // script blocks on it forever and matugen below never runs.
       if (outputs === "all") {
         wallpaperCmd = `mpvpaper -o 'loop --no-audio --hwdec=auto' '*' "${escPath}" &`
       } else {
@@ -404,23 +440,7 @@ ShellRoot {
       wallpaperCmd = `awww img ${outputFlag} "${escPath}" --transition-type wave --transition-angle 30 --transition-wave "60,30" --transition-step 90 --transition-fps 60`
     }
 
-    // matugen can't decode video containers (mp4/mkv/webm/mov) directly —
-    // it needs a still image. Rather than depend on posterExtractProc
-    // having already produced a poster for this exact file (it's a
-    // background pass over the whole folder and may not have run yet),
-    // grab a fresh frame with ffmpeg right here at apply-time. Gifs are
-    // still images to ImageMagick/matugen, so they're passed through as-is.
     const isVideoContainer = root.isVideoContainerFile(filename)
-
-    // Run the color-extraction step in the script's own foreground
-    // (after backgrounding the wallpaper-setting command above it) rather
-    // than in a nested `(...) &` subshell. The setsid-detached wrapper
-    // that runs this whole script appears to tear down before a freshly
-    // spawned nested subshell gets scheduled, so ffmpeg/matugen never
-    // actually started when they lived in a subshell. Running them as
-    // the script's last foreground steps keeps the script's own process
-    // alive until they finish, without blocking wallpaper application
-    // (mpvpaper/awww are already backgrounded above).
     const matugenBlock = isVideoContainer
       ? `FRAME_PATH="/tmp/matugen_frame_$$.png"\n` +
         `ffmpeg -y -loglevel error -ss 00:00:01 -i "${escPath}" -frames:v 1 "$FRAME_PATH" >> /tmp/matugen.log 2>&1\n` +
@@ -432,10 +452,17 @@ ShellRoot {
         `fi\n`
       : `matugen image "${escPath}" -m dark --source-color-index 0 >> /tmp/matugen.log 2>&1\n`
 
+    const cavaBlock =
+      `if pgrep -x "cava" > /dev/null; then\n` +
+      `  cat ~/.config/cava/config_base ~/.config/cava/colors > ~/.config/cava/config 2>/dev/null\n` +
+      `  pkill -USR1 cava\n` +
+      `fi\n`
+
     const script = "#!/usr/bin/env bash\n" +
       "pkill mpvpaper 2>/dev/null || true\n" +
       wallpaperCmd + "\n" +
-      matugenBlock
+      matugenBlock +
+      cavaBlock
 
     Quickshell.execDetached(["bash", "-c",
       `SCRIPT=$(mktemp /tmp/apply-wallpaper.XXXXXX.sh); cat > "$SCRIPT" << 'WPEOF'\n${script}\nWPEOF\nchmod +x "$SCRIPT"; setsid "$SCRIPT" < /dev/null &> /dev/null & disown; sleep 15; rm -f "$SCRIPT"`
@@ -446,19 +473,15 @@ ShellRoot {
   Timer {
     id: closeTimer
     interval: 120
-    onTriggered: Qt.quit()
+    onTriggered: root.visible = false
   }
 
   PanelWindow {
     id: overlay
     color: "transparent"
+    visible: root.visible
 
-    Scaler {
-      id: scaler
-      currentWidth: Screen.width
-      currentHeight: Screen.height
-    }
-    function s(val) { return scaler.s(val) }
+    function s(val) { return Scaler.s(val) }
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
@@ -466,16 +489,15 @@ ShellRoot {
     WlrLayershell.namespace: "qs-wallpaper-picker"
     anchors { top: true; left: true; right: true; bottom: true }
 
-    // click-outside-to-close catcher (no dim/fade)
     MouseArea {
       anchors.fill: parent
-      onClicked: Qt.quit()
+      onClicked: root.visible = false
     }
 
     FocusScope {
       anchors.fill: parent
       focus: true
-      Keys.onEscapePressed: Qt.quit()
+      Keys.onEscapePressed: root.visible = false
 
       Rectangle {
         id: card
@@ -485,18 +507,14 @@ ShellRoot {
         radius: overlay.s(14)
         clip: true
         focus: true
-        color: Qt.rgba(MatugenColors.bgBase.r, MatugenColors.bgBase.g, MatugenColors.bgBase.b, 0.85)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.06)
+        color: MatugenColors.bgBase
 
-        // Fade the card in only once the wallpaper list has actually
-        // loaded, instead of showing an empty list for a moment first.
         opacity: root.wallpapers.length > 0 ? 1 : 0
         scale: root.wallpapers.length > 0 ? 1 : 0.95
         Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
         Behavior on scale { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
 
-        Keys.onEscapePressed: Qt.quit()
+        Keys.onEscapePressed: root.visible = false
         MouseArea { anchors.fill: parent }
 
         ColumnLayout {
@@ -504,7 +522,6 @@ ShellRoot {
           anchors.margins: overlay.s(20)
           spacing: overlay.s(14)
 
-          // inputbar
           Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: overlay.s(46)
@@ -518,15 +535,6 @@ ShellRoot {
               anchors.leftMargin: overlay.s(14)
               anchors.rightMargin: overlay.s(14)
               spacing: overlay.s(8)
-
-              Text {
-                text: "󰸉"
-                font.pixelSize: overlay.s(13)
-                font.weight: Font.Bold
-                font.family: "JetBrainsMono Nerd Font"
-                color: MatugenColors.accent
-                anchors.verticalCenter: parent.verticalCenter
-              }
 
               TextInput {
                 id: searchInput
@@ -544,7 +552,7 @@ ShellRoot {
                   root.clampSelection()
                 }
 
-                Keys.onEscapePressed: Qt.quit()
+                Keys.onEscapePressed: root.visible = false
                 Keys.onReturnPressed: {
                   if (root.selectedIndex >= 0 && root.selectedIndex < filteredModel.values.length) {
                     root.applyWallpaper(filteredModel.values[root.selectedIndex])
@@ -565,7 +573,6 @@ ShellRoot {
             }
           }
 
-          // color filter + monitor row
           RowLayout {
             Layout.fillWidth: true
             spacing: overlay.s(8)
@@ -605,7 +612,6 @@ ShellRoot {
 
             Item { Layout.fillWidth: true }
 
-            // Monitor selector — only shown when more than one output exists
             Row {
               visible: monitorModel.count > 1
               spacing: overlay.s(6)
@@ -632,7 +638,6 @@ ShellRoot {
             }
           }
 
-          // listview
           Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -673,44 +678,46 @@ ShellRoot {
 
                   Image {
                     anchors.fill: parent
-                    // Qt's image plugins decode a gif's first frame like any
-                    // other still image, so gifs get a real thumbnail here.
-                    // True video containers use the pre-extracted poster below.
                     visible: !thumbCard.isVideoContainer
                     source: thumbCard.isVideoContainer ? "" : "file://" + root.wallpaperDir + "/" + thumbCard.modelData
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     smooth: true
-                    // Decode at thumbnail size instead of full wallpaper
-                    // resolution, this is what actually made loading feel
-                    // slow once the file list itself became instant.
                     sourceSize.width: thumbCard.width
                     sourceSize.height: thumbCard.height
                   }
 
-                  // Video containers (mp4/mkv/webm/mov) get a poster frame
-                  // extracted by ffmpeg during the background color-extract
-                  // pass (see posterExtractProc) since there's no in-process
-                  // decoder available without QtMultimedia. Falls back to a
-                  // plain tile until the poster file shows up on disk.
                   Image {
-                    anchors.fill: parent
-                    visible: thumbCard.isVideoContainer
-                    source: thumbCard.isVideoContainer
-                            ? "file://" + root.posterDir + "/" + thumbCard.modelData + ".jpg" : ""
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    smooth: true
-                    sourceSize.width: thumbCard.width
-                    sourceSize.height: thumbCard.height
-                    cache: false
+  anchors.fill: parent
+  visible: thumbCard.isVideoContainer
+  source: {
+    root.posterCacheVersion
+    return thumbCard.isVideoContainer
+          ? "file://" + root.posterDir + "/" + thumbCard.modelData + ".jpg"
+          : ""
+  }
+  fillMode: Image.PreserveAspectCrop
+  asynchronous: true
+  smooth: true
+  sourceSize.width: thumbCard.width
+  sourceSize.height: thumbCard.height
+  cache: false
 
-                    Rectangle {
-                      anchors.fill: parent
-                      visible: parent.status !== Image.Ready
-                      color: Qt.rgba(MatugenColors.bgElevated.r, MatugenColors.bgElevated.g, MatugenColors.bgElevated.b, 1.0)
-                    }
-                  }
+  Rectangle {
+    anchors.fill: parent
+    visible: parent.status !== Image.Ready
+    color: Qt.rgba(MatugenColors.bgElevated.r, MatugenColors.bgElevated.g, MatugenColors.bgElevated.b, 1.0)
+  }
+
+  Text {
+    anchors.centerIn: parent
+    visible: parent.status === Image.Error
+    text: ""
+    font.family: "JetBrainsMono Nerd Font"
+    font.pixelSize: overlay.s(20)
+    color: MatugenColors.textDim
+  }
+}
                 }
 
                 Rectangle {

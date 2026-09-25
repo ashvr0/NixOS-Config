@@ -1,0 +1,9 @@
+DesktopWidgets 1.0 DesktopWidgets.qml
+DesktopWidgetFrame 1.0 DesktopWidgetFrame.qml
+DesktopClockWidget 1.0 DesktopClockWidget.qml
+DesktopMusicWidget 1.0 DesktopMusicWidget.qml
+DesktopWeatherWidget 1.0 DesktopWeatherWidget.qml
+DesktopCalendarWidget 1.0 DesktopCalendarWidget.qml
+DesktopImageWidget 1.0 DesktopImageWidget.qml
+DesktopSystemStatWidget 1.0 DesktopSystemStatWidget.qml
+DesktopCavaWidget 1.0 DesktopCavaWidget.qml

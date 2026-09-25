@@ -4,10 +4,9 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     spicetify-nix.url = "github:Gerg-L/spicetify-nix";
-    awww.url = "git+https://codeberg.org/LGFae/awww?ref=main";
-    quickshell.url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
     nix-gaming.url = "github:fufexan/nix-gaming";
     zen-browser.url = "github:youwen5/zen-browser-flake";
+    serpantinum.url = "github:ilyamiro/serpantinum";
 
     home-manager = {
       url = "github:nix-community/home-manager";

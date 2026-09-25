@@ -1,11 +1,15 @@
+import "Singletons"
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Io
 
 Item {
   id: root
-  implicitWidth: contentRow.implicitWidth + s(12)
-  implicitHeight: parent ? parent.height : s(50)
+  property bool vertical: Config.barVertical
+  property real counterRotation: vertical ? (Config.barPosition === "left" ? 90 : -90) : 0
+
+  implicitWidth: vertical ? s(50) : (contentRow.implicitWidth + s(16))
+  implicitHeight: vertical ? (contentRow.implicitHeight + s(16)) : (parent ? parent.height : s(50))
   property int cascadeIndex: 2
   property string layoutFull: "English (US)"
   property string layoutShort: {
@@ -14,14 +18,13 @@ Item {
   }
   property bool entered: false
 
-  Scaler {
-    id: scaler
-    currentWidth: Screen.width
-    currentHeight: Screen.height
-  }
+  Component.onCompleted: {
+        Scaler.currentWidth = Screen.width
+        Scaler.currentHeight = Screen.height
+    }
 
   function s(val) {
-    return scaler.s(val)
+    return Scaler.s(val)
   }
 
   Rectangle {
@@ -66,7 +69,11 @@ Item {
     }
   }
 
-  Process { id: switchProc; command: ["hyprctl", "switchxkblayout", "main", "next"] }
+  Process {
+    id: switchProc
+    command: ["hyprctl", "switchxkblayout", "main", "next"]
+    onExited: kbProc.running = true
+  }
 
   Timer {
     interval: 1000; running: true; repeat: true; triggeredOnStart: true
@@ -92,6 +99,7 @@ Item {
       font.pixelSize: s(13)
       font.weight: Font.Black
       font.family: "JetBrainsMono Nerd Font"
+      width: implicitWidth
     }
   }
 
@@ -100,6 +108,6 @@ Item {
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
-    onClicked: switchProc.running = true
+    onClicked: { if (!switchProc.running) switchProc.running = true }
   }
 }

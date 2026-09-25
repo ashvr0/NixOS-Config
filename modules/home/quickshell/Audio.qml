@@ -1,3 +1,4 @@
+import "Singletons"
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -8,11 +9,11 @@ import Quickshell.Services.Pipewire
 Item {
   id: root
 
-  Scaler {
-    id: scaler
-    currentWidth: Screen.width
+  Component.onCompleted: {
+    Scaler.currentWidth = Screen.width
   }
-  function s(val) { return scaler.s(val) }
+
+  function s(val) { return Scaler.s(val) }
 
   IpcHandler {
     target: "audio"
@@ -29,16 +30,15 @@ Item {
   property bool volumeMenuOpen: false
   property bool osdVisible: false
   property bool osdFirstRun: true
-  property int  activeTab: 0 // 0 output, 1 input, 2 apps
-
+  property int  activeTab: 0
   property int    volumeLevel: sinkAudio ? Math.round(sinkAudio.volume * 100) : 0
   property bool   muted:       sinkAudio ? sinkAudio.muted : false
   property string sinkName:    sink ? (sink.description || sink.nickname || sink.name || "Audio Output") : "Audio Output"
   property string volumeIcon: {
-    if (root.muted || root.volumeLevel === 0) return "\u{f026}"
-    if (root.volumeLevel >= 70) return "\u{f028}"
-    if (root.volumeLevel >= 30) return "\u{f027}"
-    return "\u{f026}"
+    if (root.muted || root.volumeLevel === 0) return "󰖁"
+    if (root.volumeLevel >= 70) return ""
+    if (root.volumeLevel >= 30) return ""
+    return ""
   }
 
   readonly property var outputDevices: {
@@ -85,22 +85,18 @@ Item {
   readonly property int  heroLevel: heroAudio ? Math.round(heroAudio.volume * 100) : 0
   readonly property bool heroMuted: heroAudio ? heroAudio.muted : false
   readonly property string heroName: heroNode ? (heroNode.description || heroNode.nickname || heroNode.name || "No Device") : "No Device"
-
   readonly property color accentColor: MatugenColors.accent
-  // Slightly lighter accent so bars/handles read as a gradient instead of a flat fill.
   readonly property color accentColorLight: Qt.lighter(MatugenColors.accent, 1.35)
-
-  // Guess a device-class glyph from the node name so the list isn't a wall of identical rows.
   function deviceGlyph(node, isInput) {
     var name = ((node.description || node.name || "") + "").toLowerCase()
     if (isInput) {
-      if (name.indexOf("webcam") !== -1) return "\u{f03d}"
-      return "\u{f130}"
+      if (name.indexOf("webcam") !== -1) return ""
+      return ""
     }
-    if (name.indexOf("headphone") !== -1 || name.indexOf("headset") !== -1) return "\u{f025}"
-    if (name.indexOf("hdmi") !== -1 || name.indexOf("monitor") !== -1 || name.indexOf("tv") !== -1) return "\u{f26c}"
-    if (name.indexOf("bluetooth") !== -1) return "\u{f293}"
-    return "\u{f028}"
+    if (name.indexOf("headphone") !== -1 || name.indexOf("headset") !== -1) return ""
+    if (name.indexOf("hdmi") !== -1 || name.indexOf("monitor") !== -1 || name.indexOf("tv") !== -1) return ""
+    if (name.indexOf("bluetooth") !== -1) return ""
+    return ""
   }
 
   property int  _lastVol:   volumeLevel
@@ -150,8 +146,8 @@ Item {
     id: volOsd
     visible: osdAnim > 0.01
     color: "transparent"
-    implicitWidth: s(180)
-    implicitHeight: s(180)
+    implicitWidth: s(360)
+    implicitHeight: s(56)
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
@@ -163,24 +159,11 @@ Item {
     property real osdAnim: root.osdVisible ? 1.0 : 0.0
     Behavior on osdAnim { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
-    // Layered shadow: two soft rects offset behind the card fake elevation
-    // without a real blur pass, which avoids an extra compositor effect node.
     Rectangle {
       anchors.centerIn: parent
-      anchors.verticalCenterOffset: s(4)
-      width: s(150)
-      height: s(150)
-      radius: s(20)
-      color: Qt.rgba(0, 0, 0, 0.35)
-      opacity: volOsd.osdAnim * 0.6
-      scale: 0.97
-    }
-
-    Rectangle {
-      anchors.centerIn: parent
-      width: s(150)
-      height: s(150)
-      radius: s(18)
+      width: s(300)
+      height: s(50)
+      radius: s(10)
       color: Qt.rgba(0.13, 0.13, 0.14, 0.92)
       border.color: Qt.rgba(1, 1, 1, 0.09)
       border.width: 1
@@ -188,42 +171,85 @@ Item {
       scale: 0.95 + 0.05 * volOsd.osdAnim
       Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
-      Column {
-        anchors.centerIn: parent
-        spacing: s(14)
+      MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.NoButton
+        onWheel: (wheel) => {
+          var delta = wheel.angleDelta.y > 0 ? 5 : -5
+          var pct = Math.max(0, Math.min(100, root.volumeLevel + delta))
+          root.setVolume(pct)
+        }
+      }
+
+      RowLayout {
+        anchors.fill: parent
+        anchors.leftMargin: s(10)
+        anchors.rightMargin: s(8)
+        spacing: s(6)
 
         Text {
-          text: root.muted ? "\u{f026}" : root.volumeIcon
-          font.pixelSize: s(36)
+          text: root.muted ? "󰖁" : root.volumeIcon
+          font.pixelSize: s(18)
           font.family: "JetBrainsMono Nerd Font"
-          color: root.muted ? MatugenColors.textMuted : "white"
-          anchors.horizontalCenter: parent.horizontalCenter
+          color: root.muted ? "white" : MatugenColors.accent
+
+          MouseArea {
+            anchors.fill: parent
+            anchors.margins: s(-6)
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.toggleMute()
+          }
+        }
+
+        Item {
+          id: osdSliderRoot
+          Layout.fillWidth: true
+          Layout.preferredHeight: s(16)
+
+          Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width
+            height: s(10)
+            radius: s(5)
+            color: Qt.rgba(1, 1, 1, 0.12)
+
+            Rectangle {
+              width: parent.width * (Math.min(root.volumeLevel, 100) / 100)
+              height: parent.height
+              radius: s(5)
+              color: root.heroMuted ? MatugenColors.textMuted : root.accentColor
+              Behavior on width { enabled: !osdSliderMa.pressed; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            }
+          }
+
+          MouseArea {
+            id: osdSliderMa
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onPressed: (mouse) => updateVol(mouse.x)
+            onPositionChanged: (mouse) => { if (pressed) updateVol(mouse.x) }
+            function updateVol(mx) {
+              var pct = Math.max(0, Math.min(100, Math.round((mx / width) * 100)))
+              if (root.muted) root.toggleMute()
+              root.setVolume(pct)
+            }
+
+            onWheel: (wheel) => {
+              var delta = wheel.angleDelta.y > 0 ? 5 : -5
+              var pct = Math.max(0, Math.min(100, root.volumeLevel + delta))
+              root.setVolume(pct)
+            }
+          }
         }
 
         Text {
-          text: root.muted ? "Muted" : root.volumeLevel + "%"
+          text: root.volumeLevel + "%"
           font.family: "JetBrainsMono Nerd Font"
           font.pixelSize: s(11)
           font.weight: Font.DemiBold
           color: Qt.rgba(1, 1, 1, 0.55)
-          anchors.horizontalCenter: parent.horizontalCenter
-        }
-
-        Rectangle {
-          width: s(90); height: s(5); radius: s(2.5)
-          color: Qt.rgba(1, 1, 1, 0.12)
-          anchors.horizontalCenter: parent.horizontalCenter
-
-          Rectangle {
-            width: parent.width * (root.muted ? 0 : Math.min(root.volumeLevel, 100) / 100)
-            height: parent.height; radius: s(2.5)
-            gradient: Gradient {
-              orientation: Gradient.Horizontal
-              GradientStop { position: 0.0; color: root.accentColor }
-              GradientStop { position: 1.0; color: root.accentColorLight }
-            }
-            Behavior on width { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-          }
+          Layout.preferredWidth: s(28)
+          horizontalAlignment: Text.AlignRight
         }
       }
     }
@@ -266,9 +292,6 @@ Item {
       Keys.onEscapePressed: root.volumeMenuOpen = false
       Keys.onTabPressed: root.activeTab = (root.activeTab + 1) % 3
 
-      // Soft drop shadow behind the card. Offset + layering rather than a
-      // MultiEffect node, since this popup opens/closes often and an extra
-      // effect item per open would add avoidable GPU cost.
       Rectangle {
         width: card.width
         height: card.height
@@ -283,10 +306,10 @@ Item {
 
       Rectangle {
         id: card
-        width: s(680)
+        width: s(720)
         height: Math.min(s(560), Screen.height - s(70) - s(40))
-        x: Config.barPosition === "left" ? s(8) : (Screen.width - width - s(8))
-        y: Config.barPosition === "bottom" ? (Screen.height - height - s(70)) : s(70)
+        x: Config.barPosition === "left" ? s(80) : (Config.barPosition === "right" ? (Screen.width - width - s(80)) : (Screen.width - width - s(8)))
+        y: Config.barPosition === "bottom" ? (Screen.height - height - s(70)) : (Config.barPosition === "left" || Config.barPosition === "right" ? (Screen.height - height - s(85)) : s(70))
         radius: s(14)
         color: MatugenColors.bgBase
         border.color: Qt.rgba(1, 1, 1, 0.09)
@@ -302,73 +325,6 @@ Item {
           anchors.fill: parent
           anchors.margins: s(18)
           spacing: s(14)
-
-          // ── Header: title + segmented control sharing a row ──
-          RowLayout {
-            Layout.fillWidth: true
-            spacing: s(12)
-
-            Text {
-              text: "Sound"
-              font.family: "JetBrainsMono Nerd Font"
-              font.pixelSize: s(14)
-              font.weight: Font.DemiBold
-              color: MatugenColors.text
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Rectangle {
-              Layout.preferredWidth: s(220)
-              Layout.preferredHeight: s(28)
-              radius: s(8)
-              color: Qt.rgba(1, 1, 1, 0.05)
-              border.color: Qt.rgba(1, 1, 1, 0.08)
-              border.width: 1
-
-              Rectangle {
-                width: (parent.width - s(4)) / 3
-                height: parent.height - s(4)
-                y: s(2)
-                radius: s(6)
-                color: MatugenColors.surface1
-                border.color: Qt.rgba(1, 1, 1, 0.06)
-                border.width: 1
-                x: {
-                  if (root.activeTab === 0) return s(2);
-                  if (root.activeTab === 1) return width + s(2);
-                  return (width * 2) + s(2);
-                }
-                Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-              }
-
-              RowLayout {
-                anchors.fill: parent
-                spacing: 0
-                Repeater {
-                  model: ["Output", "Input", "Apps"]
-                  Item {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Text {
-                      anchors.centerIn: parent
-                      text: modelData
-                      font.family: "JetBrainsMono Nerd Font"
-                      font.pixelSize: s(11)
-                      font.weight: root.activeTab === index ? Font.DemiBold : Font.Normal
-                      color: root.activeTab === index ? MatugenColors.text : MatugenColors.textDim
-                      Behavior on color { ColorAnimation { duration: 120 } }
-                    }
-                    MouseArea {
-                      anchors.fill: parent
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: root.activeTab = index
-                    }
-                  }
-                }
-              }
-            }
-          }
 
           // ── Hero row ──
           Rectangle {
@@ -396,7 +352,7 @@ Item {
 
                   Text {
                     anchors.centerIn: parent
-                    text: root.heroMuted ? "\u{f026}" : root.volumeIcon
+                    text: root.heroMuted ? "󰖁" : root.volumeIcon
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: s(15)
                     color: root.heroMuted ? MatugenColors.textDim : root.accentColor
@@ -444,37 +400,35 @@ Item {
               }
 
               Item {
+                id: heroSliderRoot
                 Layout.fillWidth: true
                 height: s(18)
 
+                readonly property real frac: Math.min(150, root.heroLevel) / 150
+
                 Rectangle {
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: parent.width
-                  height: s(5)
-                  radius: s(2.5)
+                  id: heroTrack
+                  anchors.fill: parent
+                  radius: height / 2
                   color: Qt.rgba(1, 1, 1, 0.08)
+                  clip: true
 
                   Rectangle {
-                    width: parent.width * (Math.min(100, root.heroLevel) / 100)
-                    height: parent.height
-                    radius: s(2.5)
-                    gradient: Gradient {
-                      orientation: Gradient.Horizontal
-                      GradientStop { position: 0.0; color: root.heroMuted ? MatugenColors.textMuted : root.accentColor }
-                      GradientStop { position: 1.0; color: root.heroMuted ? MatugenColors.textMuted : root.accentColorLight }
-                    }
-                  }
-                }
+                   width: Math.max(parent.radius * 2, parent.width * heroSliderRoot.frac)
+                   height: parent.height
+                   radius: parent.radius
+                   color: root.heroMuted ? MatugenColors.textMuted : root.accentColor
+                   Behavior on width { enabled: !sliderMa.pressed; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                   }
 
-                Rectangle {
-                  width: s(15); height: s(15); radius: s(7.5)
-                  color: "white"
-                  border.color: Qt.rgba(0, 0, 0, 0.15)
-                  border.width: 1
-                  y: (parent.height - height) / 2
-                  x: Math.max(0, Math.min(parent.width - width, (parent.width * (Math.min(100, root.heroLevel) / 100)) - width / 2))
-                  scale: sliderMa.pressed ? 1.15 : 1.0
-                  Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                  Rectangle {
+                    width: s(2)
+                    height: parent.height
+                    x: Math.max(0, Math.min(parent.width - width, parent.width * heroSliderRoot.frac - width / 2))
+                    color: MatugenColors.bgBase
+                    opacity: 0.55
+                    Behavior on x { enabled: !sliderMa.pressed; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                  }
                 }
 
                 MouseArea {
@@ -485,13 +439,69 @@ Item {
                   onPositionChanged: (mouse) => { if (pressed) updateVol(mouse.x) }
                   function updateVol(mx) {
                     var pct = Math.max(0, Math.min(150, Math.round((mx / width) * 150)))
+                    root.setNodeVolume(root.heroNode, pct)}
+
+                  onWheel: (wheel) => {
+                    var delta = wheel.angleDelta.y > 0 ? 5 : -5
+                    var pct = Math.max(0, Math.min(150, root.heroLevel + delta))
                     root.setNodeVolume(root.heroNode, pct)
-                  }
+                    }
                 }
               }
             }
           }
 
+// ── Tab switcher (stretched, below hero) ──
+Rectangle {
+  Layout.fillWidth: true
+  Layout.preferredHeight: s(32)
+  radius: s(8)
+  color: Qt.rgba(1, 1, 1, 0.05)
+  border.color: Qt.rgba(1, 1, 1, 0.08)
+  border.width: 1
+
+  Rectangle {
+    width: (parent.width - s(4)) / 3
+    height: parent.height - s(4)
+    y: s(2)
+    radius: s(6)
+    color: MatugenColors.bgElevated2
+    border.color: Qt.rgba(1, 1, 1, 0.06)
+    border.width: 1
+    x: {
+      if (root.activeTab === 0) return s(2);
+      if (root.activeTab === 1) return width + s(2);
+      return (width * 2) + s(2);
+    }
+    Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+  }
+
+  RowLayout {
+    anchors.fill: parent
+    spacing: 0
+    Repeater {
+      model: ["Output", "Input", "Apps"]
+      Item {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        Text {
+          anchors.centerIn: parent
+          text: modelData
+          font.family: "JetBrainsMono Nerd Font"
+          font.pixelSize: s(11)
+          font.weight: root.activeTab === index ? Font.DemiBold : Font.Normal
+          color: root.activeTab === index ? MatugenColors.text : MatugenColors.textDim
+          Behavior on color { ColorAnimation { duration: 120 } }
+        }
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.activeTab = index
+        }
+      }
+    }
+  }
+}
           // ── Device list ──
           ListView {
             id: deviceList
@@ -512,14 +522,14 @@ Item {
                 Text {
                   anchors.horizontalCenter: parent.horizontalCenter
                   font.family: "JetBrainsMono Nerd Font"
-                  font.pixelSize: s(20)
+                  font.pixelSize: s(25)
                   color: MatugenColors.textMuted
-                  text: root.activeTab === 2 ? "\u{f028}" : "\u{f290}"
+                  text: root.activeTab === 2 ? "" : "󰓃"
                 }
                 Text {
                   anchors.horizontalCenter: parent.horizontalCenter
                   font.family: "JetBrainsMono Nerd Font"
-                  font.pixelSize: s(11)
+                  font.pixelSize: s(15)
                   color: MatugenColors.textDim
                   text: root.activeTab === 2 ? "No applications playing audio" : "No devices found"
                 }
@@ -529,21 +539,24 @@ Item {
             delegate: Rectangle {
               id: delegateRoot
               width: deviceList.width
-              height: s(50)
+              height: root.activeTab === 2 ? s(64) : s(50)
               radius: s(10)
-              color: rowMa.containsMouse ? Qt.rgba(1, 1, 1, 0.045) : "transparent"
-              Behavior on color { ColorAnimation { duration: 100 } }
 
               property bool isDefault: {
                 if (root.activeTab === 2) return false
                 if (root.activeTab === 1) return root.source === modelData
                 return root.sink === modelData
               }
+            
+              color: rowMa.containsMouse ? MatugenColors.bgElevated2 : MatugenColors.bgElevated
+              
+              readonly property int nodeLevel: modelData.audio ? Math.round(modelData.audio.volume * 100) : 0
+              readonly property bool nodeMuted: modelData.audio ? modelData.audio.muted : false
 
               MouseArea {
                 id: rowMa
                 anchors.fill: parent
-                hoverEnabled: root.activeTab !== 2
+                hoverEnabled: true
                 cursorShape: root.activeTab !== 2 ? Qt.PointingHandCursor : Qt.ArrowCursor
                 onClicked: {
                   if (root.activeTab === 2) return
@@ -552,7 +565,9 @@ Item {
                 }
               }
 
+              // ── Output / Input row layout (unchanged) ──
               RowLayout {
+                visible: root.activeTab !== 2
                 anchors.fill: parent
                 anchors.leftMargin: s(10)
                 anchors.rightMargin: s(10)
@@ -562,14 +577,14 @@ Item {
                   Layout.preferredWidth: s(30)
                   Layout.preferredHeight: s(30)
                   radius: s(8)
-                  color: delegateRoot.isDefault ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) : Qt.rgba(1, 1, 1, 0.05)
+                  color: delegateRoot.isDefault ? root.accentColor : MatugenColors.textDim
 
                   Text {
                     anchors.centerIn: parent
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: s(13)
-                    color: delegateRoot.isDefault ? root.accentColor : MatugenColors.textDim
-                    text: root.activeTab === 2 ? "\u{f028}" : root.deviceGlyph(modelData, root.activeTab === 1)
+                     color: MatugenColors.text
+                    text: root.deviceGlyph(modelData, root.activeTab === 1)
                   }
                 }
 
@@ -578,18 +593,11 @@ Item {
                   spacing: s(1)
 
                   Text {
-                    Layout.fillWidth: true; elide: Text.ElideRight
-                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: s(12)
-                    font.weight: delegateRoot.isDefault ? Font.DemiBold : Font.Normal
-                    color: MatugenColors.text
-                    text: {
-                      if (root.activeTab === 2) {
-                        return modelData.properties && modelData.properties["application.name"]
-                          ? modelData.properties["application.name"]
-                          : (modelData.description || modelData.name)
-                      }
-                      return modelData.description || modelData.nickname || modelData.name
-                    }
+                      Layout.fillWidth: true; elide: Text.ElideRight
+                      font.family: "JetBrainsMono Nerd Font"; font.pixelSize: s(12)
+                      font.weight: delegateRoot.isDefault ? Font.DemiBold : Font.Normal
+                      color: MatugenColors.text
+                      text: modelData.description || modelData.nickname || modelData.name
                   }
 
                   Text {
@@ -602,11 +610,11 @@ Item {
                 }
 
                 Text {
-                  visible: root.activeTab === 2 || !delegateRoot.isDefault
+                  visible: !delegateRoot.isDefault
                   font.family: "JetBrainsMono Nerd Font"
                   font.pixelSize: s(10)
-                  color: MatugenColors.textDim
-                  text: (modelData.audio && modelData.audio.muted) ? "Muted" : (modelData.audio ? Math.round(modelData.audio.volume * 100) + "%" : "")
+                  color: MatugenColors.text
+                  text: delegateRoot.nodeMuted ? "Muted" : (modelData.audio ? delegateRoot.nodeLevel + "%" : "")
                 }
 
                 Rectangle {
@@ -619,8 +627,8 @@ Item {
                     anchors.centerIn: parent
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: s(11)
-                    color: (modelData.audio && modelData.audio.muted) ? MatugenColors.textMuted : MatugenColors.textDim
-                    text: (modelData.audio && modelData.audio.muted) ? "\u{f026}" : "\u{f028}"
+                    color: delegateRoot.nodeMuted ? MatugenColors.textMuted : MatugenColors.textDim
+                    text: delegateRoot.nodeMuted ? "󰖁" : ""
                   }
 
                   MouseArea {
@@ -629,6 +637,115 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.toggleNodeMute(modelData)
+                  }
+                }
+              }
+
+              // ── Apps row layout ──
+              ColumnLayout {
+                visible: root.activeTab === 2
+                anchors.fill: parent
+                anchors.leftMargin: s(10)
+                anchors.rightMargin: s(10)
+                anchors.topMargin: s(7)
+                anchors.bottomMargin: s(7)
+                spacing: s(4)
+
+                RowLayout {
+                  Layout.fillWidth: true
+                  spacing: s(7)
+
+                  Text {
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: s(11)
+                    color: MatugenColors.textDim
+                    text: ""
+                  }
+
+                  Text {
+                    Layout.fillWidth: true; elide: Text.ElideRight
+                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: s(12)
+                    font.weight: Font.DemiBold
+                    color: MatugenColors.text
+                    text: {
+                      var appName = modelData.properties && modelData.properties["application.name"]
+                        ? modelData.properties["application.name"]
+                        : (modelData.description || modelData.name || "Unknown App")
+                      var media = modelData.properties
+                        ? (modelData.properties["media.name"] || modelData.properties["media.title"] || "")
+                        : ""
+                      return media ? (appName + " \u2013 " + media) : appName
+                    }
+                  }
+                }
+
+                RowLayout {
+                  Layout.fillWidth: true
+                  spacing: s(7)
+
+                  Text {
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: s(10)
+                    color: delegateRoot.nodeMuted ? MatugenColors.textMuted : MatugenColors.textDim
+                    text: delegateRoot.nodeMuted ? "󰖁" : ""
+
+                    MouseArea {
+                      anchors.fill: parent
+                      anchors.margins: s(-4)
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: root.toggleNodeMute(modelData)
+                    }
+                  }
+
+                  Item {
+                    id: appSliderRoot
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: s(12)
+
+                    readonly property real frac: Math.min(150, delegateRoot.nodeLevel) / 150
+
+                    Rectangle {
+                      id: appTrack
+                      anchors.fill: parent
+                      radius: height / 2
+                      color: Qt.rgba(1, 1, 1, 0.08)
+                      clip: true
+
+                      Rectangle {
+                        width: Math.max(parent.radius * 2, parent.width * appSliderRoot.frac)
+                        height: parent.height
+                        radius: parent.radius
+                        color: delegateRoot.nodeMuted ? MatugenColors.textMuted : root.accentColor
+                        Behavior on width { enabled: !appSliderMa.pressed; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                      }
+                    }
+
+                    MouseArea {
+                      id: appSliderMa
+                      anchors.fill: parent
+                      cursorShape: Qt.PointingHandCursor
+                      onPressed: (mouse) => updateVol(mouse.x)
+                      onPositionChanged: (mouse) => { if (pressed) updateVol(mouse.x) }
+                      function updateVol(mx) {
+                        var pct = Math.max(0, Math.min(150, Math.round((mx / width) * 150)))
+                        root.setNodeVolume(modelData, pct)
+                      }
+
+                      onWheel: (wheel) => {
+                        var delta = wheel.angleDelta.y > 0 ? 5 : -5
+                        var pct = Math.max(0, Math.min(150, delegateRoot.nodeLevel + delta))
+                        root.setNodeVolume(modelData, pct)
+                      }
+                    }
+                  }
+
+                  Text {
+                    Layout.preferredWidth: s(30)
+                    horizontalAlignment: Text.AlignRight
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: s(10)
+                    color: delegateRoot.nodeMuted ? MatugenColors.textMuted : MatugenColors.textDim
+                    text: delegateRoot.nodeMuted ? "\u2014" : delegateRoot.nodeLevel + "%"
                   }
                 }
               }

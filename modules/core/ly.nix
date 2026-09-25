@@ -1,4 +1,4 @@
-{ host, lib, ... }:
+{ ... }:
 {
   services.displayManager.ly = {
     enable = true;

@@ -1,10 +1,23 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import ".."
+import "../Singletons"
 
 Item {
   id: root
-  implicitWidth: barRow.implicitWidth + 20 * Config.uiScale
+
+  property bool vertical: Config.barVertical
+  property real counterRotation: vertical ? (Config.barPosition === "left" ? 90 : -90) : 0
+
+  Component.onCompleted: {
+    Scaler.currentWidth = Screen.width
+    Scaler.currentHeight = Screen.height
+  }
+  function s(val) { return Scaler.s(val) }
+
+  implicitWidth: vertical ? s(50) : (barRow.implicitWidth + 20 * Config.uiScale)
+  implicitHeight: vertical ? (barColumn.implicitHeight + 20 * Config.uiScale) : s(56)
 
   // Entrance
   property int  cascadeIndex: 1
@@ -14,14 +27,11 @@ Item {
   transform: Translate { y: root.entered ? 0 : 14; Behavior on y { NumberAnimation { duration: 450; easing.type: Easing.OutCubic } } }
   Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
 
-  // Floating pill background. Always hidden now — Bar.qml draws one
-  // continuous surface behind the whole right zone in both bar styles,
-  // so this module no longer needs its own separate box.
   Rectangle {
     id: pillBg
     visible: false
-    height: 50 * Config.uiScale
-    width: barRow.implicitWidth + 24 * Config.uiScale
+    height: root.vertical ? (barColumn.implicitHeight + 24 * Config.uiScale) : 50 * Config.uiScale
+    width: root.vertical ? s(50) : (barRow.implicitWidth + 24 * Config.uiScale)
     radius: 14 * Config.uiScale
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
@@ -32,12 +42,12 @@ Item {
     border.width: 1 * Config.uiScale
   }
 
-  // Bar row
+  // Bar row (horizontal bar)
   Row {
     id: barRow
+    visible: !root.vertical
     anchors.verticalCenter: parent.verticalCenter
-    anchors.right: parent.right
-    anchors.rightMargin: 14 * Config.uiScale
+    x: 6 * Config.uiScale
     spacing: 16 * Config.uiScale
 
     // Calendar
@@ -70,6 +80,44 @@ Item {
         anchors.centerIn: parent
       }
     }
+  }
 
+  // Bar column (vertical bar)
+  Column {
+    id: barColumn
+    visible: root.vertical
+    anchors.horizontalCenter: parent.horizontalCenter
+    y: 6 * Config.uiScale
+    spacing: 16 * Config.uiScale
+
+    Item {
+      width: 56 * Config.uiScale; height: calendarModuleV.implicitWidth + 14 * Config.uiScale
+
+      MouseArea {
+        id: calHoverBgV
+        anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton
+      }
+
+      Item {
+        anchors.centerIn: parent
+        anchors.horizontalCenterOffset: 3 * Config.uiScale
+        height: parent.height - 4 * Config.uiScale; width: 32 * Config.uiScale
+        opacity: (calHoverBgV.containsMouse || calendarModuleV.calendarOpen) ? 0.6 : 0.32
+        Behavior on opacity { NumberAnimation { duration: 150 } }
+
+        Rectangle { anchors.fill: parent; anchors.margins: -4 * Config.uiScale; radius: 14 * Config.uiScale; color: Qt.rgba(0, 0, 0, 0.05) }
+        Rectangle { anchors.fill: parent; anchors.margins: -2 * Config.uiScale; radius: 12 * Config.uiScale; color: Qt.rgba(0, 0, 0, 0.07) }
+        Rectangle {
+          anchors.fill: parent; radius: 10 * Config.uiScale
+          color: calendarModuleV.calendarOpen ? Qt.rgba(MatugenColors.accent.r, MatugenColors.accent.g, MatugenColors.accent.b, 0.14) : Qt.rgba(0, 0, 0, 0.10)
+          Behavior on color { ColorAnimation { duration: 150 } }
+        }
+      }
+
+      Calendar {
+        id: calendarModuleV
+        anchors.centerIn: parent
+      }
+    }
   }
 }

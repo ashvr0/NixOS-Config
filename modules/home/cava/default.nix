@@ -13,5 +13,5 @@ let
 in
 {
   home.packages = [ (lib.hiPrio cava-dynamic) ];
-  xdg.configFile."cava".source = config.lib.file.mkOutOfStoreSymlink "/etc/nixos/modules/home/cava/";
+  xdg.configFile."cava/config_base".source = config.lib.file.mkOutOfStoreSymlink "/etc/nixos/modules/home/cava/config";
 }

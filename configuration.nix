@@ -1,13 +1,12 @@
 { config, pkgs, inputs, ... }:
-
-let
-  awww = inputs.awww;
-in
 {
   imports = [
     ./hardware-configuration.nix
     ./modules/core/default.nix
+    inputs.serpantinum.nixosModules.default
   ];
+
+   programs.serpantinum.enable = true;
 
   swapDevices = [
     { device = "/swapfile"; size = 4096; }

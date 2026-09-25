@@ -10,35 +10,103 @@ Item {
     readonly property string hyprConf: homeDir + "/.config/hypr/keybinds.lua"
     readonly property string keybindNamesPath: homeDir + "/.config/quickshell/keybind_names.json"
     readonly property string settingsPath: homeDir + "/.local/state/quickshell/settings.json"
-
+    property string nightLightMode: "Never"
+    property string nightLightFrom: "20:00"
+    property string nightLightTo: "07:00"
+    property int autoLockSeconds: 300
     property string wallpaperDir: homeDir + "/.config/hypr/wallpapers"
     property string mainMod: "SUPER"
     property int workspaceCount: 6
+    property string workspaceStyle: "numbers"
     property real uiScale: 1.0
     property bool tempUnitFahrenheit: false
+    property string weatherLocation: "New York"
+    property string profilePicturePath: homeDir + "/.config/hypr/profile.jpg"
     property bool showClockSeconds: false
     property bool clock24h: false
-    property string barPosition: "top"
+    property string notifPosition: "top-right"
+    property string barPosition: "left"
+    readonly property bool barVertical: barPosition === "left" || barPosition === "right"
     property bool autoHideBar: false
-    // 40-100: how far the center/right zones sit from the bar's edges.
-    // Higher pushes zones further apart (bigger gap around the center
-    // module); Settings.qml's slider is clamped to this same range.
     property int barWidthPercent: 100
-    // "modular": each module renders as its own separate pill/card.
-    // "solid": all modules in a zone render inside one continuous bar
-    // surface with no gaps between them. Bar.qml reads this to decide
-    // whether zones draw individual module backgrounds or one shared one.
+    property int barOpacityPercent: 100
     property string barStyle: "solid"
-    // Every module's own pill background binds its visibility to this so
-    // "solid" actually merges modules into one surface instead of each
-    // module still painting its own background on top of/inside the
-    // shared zone surface Bar.qml draws.
     readonly property bool solidBarActive: barStyle === "solid"
-    // Whether the guide/help trigger button shows in the top bar.
     property bool showGuideButton: false
     property string fontFamily: "JetBrainsMono Nerd Font"
     property int uiRadius: 10
     property string colorScheme: "matugen"
+    property bool desktopEditMode: false
+    property var desktopWidgets: []
+    property bool desktopSnapToGrid: false
+    property string desktopSelectedWidgetId: ""
+
+        readonly property var desktopWidgetTypes: [
+        { type: "clock", label: "Clock", icon: "\uf017", w: 640, h: 340, minW: 200, minH: 120, maxW: 900, maxH: 500 },
+        { type: "calendar", label: "Calendar", icon: "\uf133", w: 320, h: 340, minW: 220, minH: 200, maxW: 800, maxH: 700 },
+        { type: "musicplayer", label: "Music", icon: "\uf001", w: 646, h: 227, variant: "wide", minW: 300, minH: 160, maxW: 900, maxH: 700 },
+        { type: "weather", label: "Weather", icon: "\uf0c2", w: 300, h: 300, minW: 180, minH: 180, maxW: 600, maxH: 500 },
+        { type: "image", label: "Image", icon: "\uf03e", w: 500, h: 300, minW: 120, minH: 120, maxW: 1200, maxH: 1200 },
+        { type: "systemstat", label: "System Stat", icon: "\uf2db", w: 220, h: 160, minW: 140, minH: 100, maxW: 600, maxH: 400 },
+        { type: "cava", label: "Audio Visualizer", icon: "\uf001", w: 1920, h: 180, minW: 50, minH: 50, maxW: 9999, maxH: 9999 }
+    ]
+
+    readonly property var systemStatVariants: [
+        { variant: "cpu", label: "CPU" },
+        { variant: "ram", label: "RAM" },
+        { variant: "temp", label: "Temp" },
+        { variant: "disk", label: "Disk" },
+        { variant: "battery", label: "Battery" }
+    ]
+
+    readonly property var clockVariants: [
+        { size: "digital", label: "Digital", w: 640, h: 340 },
+        { size: "analog", label: "Analog", w: 470, h: 370 },
+        { size: "minimal", label: "Minimal", w: 400, h: 160 }
+    ]
+
+    readonly property var weatherSizePresets: [
+        { size: "small", label: "Small", w: 250, h: 250 },
+        { size: "medium", label: "Medium", w: 460, h: 220 },
+        { size: "large", label: "Large", w: 500, h: 340 }
+    ]
+
+    readonly property var calendarVariants: [
+        { variant: "month", label: "Month Grid", w: 320, h: 340 },
+        { variant: "small", label: "Small", w: 250, h: 250 },
+        { variant: "wide", label: "Wide", w: 700, h: 227 },
+        { variant: "date", label: "Date Only", w: 250, h: 250 }
+    ]
+
+    readonly property var musicVariants: [
+        { variant: "wide", label: "Wide", w: 646, h: 227 },
+        { variant: "large", label: "Large", w: 360, h: 560 }
+    ]
+
+        function addDesktopWidget(type, x, y) {
+        let def = config.desktopWidgetTypes.find(t => t.type === type)
+        let w = def ? def.w : 300
+        let h = def ? def.h : 200
+        let list = config.desktopWidgets.slice()
+        let widget = { id: "w_" + Date.now() + "_" + Math.floor(Math.random() * 10000), type: type, x: x, y: y, w: w, h: h, opacity: 1.0, rotation: 0 }
+        if (type === "clock") widget.variant = "digital"
+        if (type === "calendar") widget.variant = "month"
+        if (type === "musicplayer") widget.variant = "wide"
+        if (type === "weather") widget.size = "small"
+        if (type === "image") widget.imagePath = ""
+        if (type === "systemstat") widget.variant = "cpu"
+        list.push(widget)
+        config.desktopWidgets = list
+        config.saveSettings()
+    }
+    function updateDesktopWidget(id, patch) {
+        config.desktopWidgets = config.desktopWidgets.map(w => w.id === id ? Object.assign({}, w, patch) : w)
+        config.saveSettings()
+    }
+    function removeDesktopWidget(id) {
+        config.desktopWidgets = config.desktopWidgets.filter(w => w.id !== id)
+        config.saveSettings()
+    }
 
     readonly property var themePresets: ({
         "matugen": null,
@@ -166,21 +234,33 @@ Item {
         { id: "monokai", label: "Monokai" },
         { id: "kanagawa", label: "Kanagawa" }
     ]
-
-    // Bar module layout: which modules appear in each zone of the bar, and
-    // in what order. Zones are read left-to-right (or top-to-bottom for a
-    // vertical bar) by Bar.qml. Stored as module id strings so this stays
-    // Single source of truth for the default layout. barLayout's own
-    // initializer and resetBarLayout() (Settings.qml) both call this
-    // instead of each hardcoding the list — a prior drift between two
-    // separate literals (one missing "settings") caused two live
-    // Settings module instances to exist at once, each registering an
-    // IpcHandler for the same "settings" target, which crashed the shell.
     function defaultBarLayout() {
-        return { left: ["launcher", "workspaces"], center: ["musicplayer"], right: ["systemtray", "keyboard", "volume", "network", "bluetooth", "systemstats", "settings", "power"] }
+        return { left: ["launcher", "workspaces"], center: ["musicplayer"], right: ["systemtray", "keyboard", "volume", "network", "bluetooth", "weather", "systemstats", "settings", "power"] }
     }
-    // trivially JSON-serializable for settings.json.
     property var barLayout: config.defaultBarLayout()
+    property var barGroups: ({})
+    property var barGroupColors: ({})
+    function setBarGroups(groups, colors) {
+        config.barGroups = groups
+        config.barGroupColors = colors
+        config.saveSettings()
+    }
+    function pruneBarGroups() {
+        let placed = {}
+        for (const id of [].concat(config.barLayout.left, config.barLayout.center, config.barLayout.right)) placed[id] = true
+        let groups = config.barGroups
+        let changed = false
+        let survivingGroupIds = {}
+        for (const id of Object.keys(groups)) {
+            if (!placed[id]) { delete groups[id]; changed = true }
+            else survivingGroupIds[groups[id]] = true
+        }
+        let colors = config.barGroupColors
+        for (const gId of Object.keys(colors)) {
+            if (!survivingGroupIds[gId]) { delete colors[gId]; changed = true }
+        }
+        if (changed) config.setBarGroups(groups, colors)
+    }
     readonly property var allBarModules: [
         { id: "launcher", label: "Launcher" },
         { id: "workspaces", label: "Workspaces" },
@@ -189,6 +269,7 @@ Item {
         { id: "systemtray", label: "Tray" },
         { id: "bluetooth", label: "Bluetooth" },
         { id: "network", label: "Network" },
+        { id: "weather", label: "Weather" },
         { id: "systemstats", label: "System Stats" },
         { id: "volume", label: "Volume" },
         { id: "settings", label: "Settings" },
@@ -199,9 +280,6 @@ Item {
         let m = config.allBarModules.find(m => m.id === id)
         return m ? m.label : id
     }
-    // Every known module id that isn't currently placed in any zone,
-    // excluding guidebutton: it's controlled by its own "Show guide
-    // button" switch in Appearance rather than by drag placement.
     function unplacedBarModules() {
         let placed = [].concat(config.barLayout.left, config.barLayout.center, config.barLayout.right)
         return config.allBarModules.map(m => m.id).filter(id => id !== "guidebutton" && !placed.includes(id))
@@ -210,13 +288,6 @@ Item {
         config.barLayout = layout
         config.saveSettings()
     }
-
-    // Helper for popup cards: which screen edge they should hug, given
-    // where the bar currently lives. Popups open on the same side as the
-    // bar so they feel anchored to it rather than always defaulting to the
-    // top-right corner regardless of bar position.
-    readonly property bool barVertical: barPosition === "left" || barPosition === "right"
-
     property var keybindNameOverrides: ({})
 
     function friendlyKeybindName(dispatcher, args) {
@@ -280,14 +351,23 @@ if (data.uiScale !== undefined)
 if (data.workspaceCount !== undefined)
     config.workspaceCount = data.workspaceCount
 
+if (data.workspaceStyle !== undefined)
+    config.workspaceStyle = data.workspaceStyle
+
 if (data.barPosition !== undefined)
-    config.barPosition = data.barPosition
+    config.barPosition = ["top", "bottom", "left", "right"].includes(data.barPosition) ? data.barPosition : "top"
+
+if (data.notifPosition !== undefined)
+    config.notifPosition = ["top-right", "top-left", "top", "bottom-right", "bottom-left", "bottom"].includes(data.notifPosition) ? data.notifPosition : "top-right"
 
 if (data.autoHideBar !== undefined)
     config.autoHideBar = data.autoHideBar
 
 if (data.barWidthPercent !== undefined)
     config.barWidthPercent = data.barWidthPercent
+
+if (data.barOpacityPercent !== undefined)
+    config.barOpacityPercent = data.barOpacityPercent
 
 if (data.barStyle !== undefined)
     config.barStyle = data.barStyle
@@ -310,11 +390,25 @@ if (data.uiRadius !== undefined)
 if (data.colorScheme !== undefined)
     config.colorScheme = data.colorScheme
 
+if (data.desktopWidgets !== undefined)
+    config.desktopWidgets = (data.desktopWidgets || []).filter(w =>
+        w && typeof w === "object" &&
+        w.id !== undefined && w.type !== undefined &&
+        w.x !== undefined && w.y !== undefined &&
+        w.w !== undefined && w.h !== undefined
+    )
+
+if (data.desktopSnapToGrid !== undefined)
+    config.desktopSnapToGrid = data.desktopSnapToGrid
+
+if (data.weatherLocation !== undefined)
+    config.weatherLocation = data.weatherLocation
+
+if (data.profilePicturePath !== undefined)
+    config.profilePicturePath = data.profilePicturePath
+
 if (data.barLayout !== undefined) {
     let loaded = data.barLayout
-    // Dedup: a module id should only ever occupy one zone. Any duplicate
-    // (e.g. from a stale save) is dropped from every zone after its first
-    // occurrence, so it can never render twice.
     let seen = {}
     function dedupZone(zone) {
         return (zone || []).filter(id => {
@@ -324,10 +418,6 @@ if (data.barLayout !== undefined) {
         })
     }
     loaded = { left: dedupZone(loaded.left), center: dedupZone(loaded.center), right: dedupZone(loaded.right) }
-    // Any module id introduced after this layout was saved (e.g. a newer
-    // build adding "settings"/"power" as standalone modules) won't appear
-    // in an old save at all. Append those to the right zone instead of
-    // leaving them stuck in "unplaced" forever on every load.
     let known = config.allBarModules.map(m => m.id).filter(id => id !== "guidebutton")
     for (const id of known) {
         if (!seen[id]) {
@@ -337,66 +427,81 @@ if (data.barLayout !== undefined) {
     }
     config.barLayout = loaded
 }
+
+if (data.barGroups !== undefined)
+    config.barGroups = data.barGroups
+
+if (data.barGroupColors !== undefined)
+    config.barGroupColors = data.barGroupColors
                 } catch (e) {}
                 config._loadingSettings = false
             }
         }
     }
     function loadSettings() { settingsLoadProc.running = false; settingsLoadProc.running = true }
+Timer {
+    id: saveDebounce
+    interval: 150
+    onTriggered: config._writeSettingsNow()
+}
+function saveSettings() {
+    if (config._loadingSettings) return
+    saveDebounce.restart()
+}
 
-    Timer {
-        id: saveDebounce
-        interval: 150
-        onTriggered: config._writeSettingsNow()
+Process {
+    id: settingsWriteProc
+    stdout: StdioCollector {
+        onStreamFinished: if (this.text.trim()) console.log("[Config] write stdout:", this.text)
     }
-    function saveSettings() {
-        // Guard against saving while values are still being populated from
-        // disk on startup: each property assignment during load fires its
-        // own onChanged handler, and without this guard the first property
-        // to load (e.g. wallpaperDir) would immediately re-save the file
-        // with the other properties still at their pre-load defaults,
-        // overwriting a real saved uiScale with 1.0 before it's even read.
-        if (config._loadingSettings) return
-        // Debounced: several properties can change in the same tick (e.g.
-        // toggling a switch that also updates a dependent property), each
-        // triggering its own onChanged -> saveSettings() call. Restarting a
-        // stateful Process on every call let a later call's command
-        // assignment silently replace an earlier call's still-in-flight
-        // write, so some toggles never made it to disk. Collapsing bursts
-        // into a single write after a short quiet period, fired via
-        // execDetached (fire-and-forget, no shared process state to race),
-        // fixes that.
-        saveDebounce.restart()
+    stderr: StdioCollector {
+        onStreamFinished: if (this.text.trim()) console.log("[Config] write stderr:", this.text)
     }
-    function _writeSettingsNow() {
-        let json = JSON.stringify({
-    wallpaperDir: config.wallpaperDir,
-    mainMod: config.mainMod,
-    uiScale: config.uiScale,
-    workspaceCount: config.workspaceCount,
-    barPosition: config.barPosition,
-    autoHideBar: config.autoHideBar,
-    barWidthPercent: config.barWidthPercent,
-    barStyle: config.barStyle,
-    showGuideButton: config.showGuideButton,
-    showClockSeconds: config.showClockSeconds,
-    clock24h: config.clock24h,
-    fontFamily: config.fontFamily,
-    uiRadius: config.uiRadius,
-    colorScheme: config.colorScheme,
-    barLayout: config.barLayout
-}, null, 2)
-        Quickshell.execDetached(["bash", "-c",
-            "mkdir -p \"$(dirname '" + config.settingsPath + "')\" && cat > '" + config.settingsPath + ".tmp' << 'STEOF'\n" + json + "\nSTEOF\nmv '" + config.settingsPath + ".tmp' '" + config.settingsPath + "'"])
-    }
+}
 
+function _writeSettingsNow() {
+    let json = JSON.stringify({
+        wallpaperDir: config.wallpaperDir,
+        mainMod: config.mainMod,
+        uiScale: config.uiScale,
+        workspaceCount: config.workspaceCount,
+        workspaceStyle: config.workspaceStyle,
+        barPosition: config.barPosition,
+        notifPosition: config.notifPosition,
+        autoHideBar: config.autoHideBar,
+        barWidthPercent: config.barWidthPercent,
+        barOpacityPercent: config.barOpacityPercent,
+        barStyle: config.barStyle,
+        showGuideButton: config.showGuideButton,
+        showClockSeconds: config.showClockSeconds,
+        clock24h: config.clock24h,
+        fontFamily: config.fontFamily,
+        uiRadius: config.uiRadius,
+        colorScheme: config.colorScheme,
+        barLayout: config.barLayout,
+        barGroups: config.barGroups,
+        barGroupColors: config.barGroupColors,
+        desktopWidgets: config.desktopWidgets,
+        desktopSnapToGrid: config.desktopSnapToGrid,
+        weatherLocation: config.weatherLocation,
+        profilePicturePath: config.profilePicturePath
+    }, null, 2)
+
+    settingsWriteProc.command = ["bash", "-c",
+        "mkdir -p \"$(dirname '" + config.settingsPath + "')\" && cat > '" + config.settingsPath + ".tmp' << 'STEOF'\n" + json + "\nSTEOF\nmv '" + config.settingsPath + ".tmp' '" + config.settingsPath + "'"]
+    settingsWriteProc.running = false
+    settingsWriteProc.running = true
+}
     onWallpaperDirChanged: config.saveSettings()
     onMainModChanged: config.saveSettings()
     onUiScaleChanged: config.saveSettings()
     onWorkspaceCountChanged: config.saveSettings()
+    onWorkspaceStyleChanged: config.saveSettings()
     onBarPositionChanged: config.saveSettings()
+    onNotifPositionChanged: config.saveSettings()
     onAutoHideBarChanged: config.saveSettings()
     onBarWidthPercentChanged: config.saveSettings()
+    onBarOpacityPercentChanged: config.saveSettings()
     onBarStyleChanged: config.saveSettings()
     onShowGuideButtonChanged: config.saveSettings()
     onShowClockSecondsChanged: config.saveSettings()
@@ -404,5 +509,9 @@ if (data.barLayout !== undefined) {
     onFontFamilyChanged: config.saveSettings()
     onUiRadiusChanged: config.saveSettings()
     onColorSchemeChanged: config.saveSettings()
+    onDesktopWidgetsChanged: config.saveSettings()
+    onDesktopSnapToGridChanged: config.saveSettings()
+    onWeatherLocationChanged: config.saveSettings()
+    onProfilePicturePathChanged: config.saveSettings()
     onBarLayoutChanged: config.saveSettings()
 }

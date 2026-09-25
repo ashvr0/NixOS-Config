@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../"
 
 Item {
     id: root
@@ -26,9 +27,6 @@ Item {
 
     property string rawJson: ""
 
-    // Matugen-derived colors, kept separate from the active (possibly
-    // preset-overridden) colors above so switching back to "matugen"
-    // doesn't require re-reading the file.
     property color mBgBase:      bgBase
     property color mBgElevated:  bgElevated
     property color mBgElevated2: bgElevated2

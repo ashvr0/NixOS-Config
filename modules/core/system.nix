@@ -16,6 +16,19 @@
   };
   
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
-  
+
+  # i2c-dev lets ddcutil talk to the LG monitor over DDC/CI for brightness
+  # control from the power menu — there's no /sys/class/backlight device on
+  # this desktop since it's an external display, not a laptop panel.
+  boot.kernelModules = [ "i2c-dev" ];
+
+  # /dev/i2c-* defaults to root-only; without this rule ddcutil needs sudo
+  # every call, which the power menu's Process calls can't prompt for.
+  # Matched on SUBSYSTEM rather than KERNEL name — more reliable across
+  # udev versions for i2c-dev nodes specifically.
+  services.udev.extraRules = ''
+    SUBSYSTEM=="i2c-dev", GROUP="i2c", MODE="0660"
+  '';
+
   system.stateVersion = "25.11"; # DONT TOUCH!!
 }

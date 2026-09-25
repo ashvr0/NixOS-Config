@@ -3,6 +3,8 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import ".."
+import "../Singletons"
 
 PanelWindow {
   id: root
@@ -94,6 +96,13 @@ PanelWindow {
     delProc.running = true
   }
 
+  readonly property var emptyMessages: [
+    "Nothing copied yet. Ctrl+C something.",
+    "Copy something, ya goblin.",
+    "Empty as my coffee cup."
+  ]
+  property string emptyMessage: emptyMessages[Math.floor(Math.random() * emptyMessages.length)]
+
   Process {
     id: delProc
     onExited: root.delQueue.length ? root.pumpDeletes() : root.refresh()
@@ -120,54 +129,50 @@ PanelWindow {
   }
 
   MouseArea { anchors.fill: parent; onClicked: root.close() }
-
+  // Popup box
   Rectangle {
     id: panel
-    width: 980
+    width: 1000
     height: 20 + 56 + (3 * 140) + (2 * 8)
     anchors.centerIn: parent
     radius: 10
-    color: "#101418"
+    color: MatugenColors.bgBase
     visible: root.visible
     clip: true
 
     ColumnLayout {
       anchors.fill: parent
-      anchors.margins: 10
-      spacing: 10
+      anchors.margins: 12
+      spacing: 12
 
       RowLayout {
         Layout.fillWidth: true
         spacing: 10
-
+        // Search Box
         Rectangle {
           Layout.fillWidth: true
-          Layout.preferredHeight: 36
+          Layout.preferredHeight: 44
           radius: 4
-          color: "#101418"
-          border.width: 1
-          border.color: "#9fcafc"
+          color: MatugenColors.bgElevated
 
           RowLayout {
             anchors.fill: parent
             anchors.margins: 10
             spacing: 10
 
-            Text { text: "󰅌"; font.family: "JetBrains Mono Nerd Font"; color: "#e1e2e8" }
-
             TextInput {
               id: query
               Layout.fillWidth: true
               font.family: "JetBrains Mono Nerd Font"
-              font.pixelSize: 14
-              color: "#e1e2e8"
+              font.pixelSize: 15
+              color: MatugenColors.text
               clip: true
               onTextChanged: root.refilter()
 
               Text {
-                text: "Clipboard"
+                text: "Search"
                 font: parent.font
-                color: "#e1e2e8"
+                color: MatugenColors.text
                 opacity: 0.5
                 visible: parent.text.length === 0
               }
@@ -187,28 +192,26 @@ PanelWindow {
 
         Rectangle {
           Layout.preferredWidth: 100
-          Layout.preferredHeight: 36
+          Layout.preferredHeight: 43
           radius: 4
-          color: clearArea.containsMouse ? "#9fcafc" : "#101418"
-          border.width: 1
-          border.color: "#9fcafc"
+          color: clearArea.containsMouse ? MatugenColors.accent : MatugenColors.bgElevated
 
           RowLayout {
             anchors.centerIn: parent
             spacing: 6
 
             Text {
-              text: ""
+              text: ""
               font.family: "JetBrains Mono Nerd Font"
               font.pixelSize: 15
-              color: clearArea.containsMouse ? "#003257" : "#e1e2e8"
+              color: clearArea.containsMouse ? MatugenColors.accentText : MatugenColors.text
             }
 
             Text {
               text: "Clear"
               font.family: "JetBrains Mono Nerd Font"
               font.pixelSize: 13
-              color: clearArea.containsMouse ? "#003257" : "#e1e2e8"
+              color: clearArea.containsMouse ? MatugenColors.accentText : MatugenColors.text
             }
           }
 
@@ -225,12 +228,37 @@ PanelWindow {
         Layout.fillWidth: true
         Layout.fillHeight: true
 
+        ColumnLayout {
+          anchors.centerIn: parent
+          visible: root.filtered.length === 0
+          spacing: 6
+
+          Text {
+            text: ""
+            font.family: "JetBrains Mono Nerd Font"
+            font.pixelSize: 28
+            color: MatugenColors.accent
+            opacity: 0.6
+            Layout.alignment: Qt.AlignHCenter
+          }
+
+          Text {
+            text: root.emptyMessage
+            font.family: "JetBrains Mono Nerd Font"
+            font.pixelSize: 14
+            color: MatugenColors.text
+            opacity: 0.6
+            Layout.alignment: Qt.AlignHCenter
+          }
+        }
+
         GridView {
           id: resultsList
           width: Math.floor(parent.width / 3) * 3
           height: parent.height
           anchors.horizontalCenter: parent.horizontalCenter
           clip: true
+          visible: root.filtered.length > 0
           model: root.filtered
           currentIndex: root.selectedIndex
           cellWidth: width / 3
@@ -247,8 +275,8 @@ PanelWindow {
               height: parent.height - 8
               radius: 6
               border.width: 1
-              border.color: index === root.selectedIndex ? "#9fcafc" : "#2a2f36"
-              color: index === root.selectedIndex ? "#9fcafc" : "#171b20"
+              border.color: index === root.selectedIndex ? MatugenColors.accent : MatugenColors.borderSoft
+              color: index === root.selectedIndex ? MatugenColors.accent : MatugenColors.bgElevated2
 
               MouseArea {
                 anchors.fill: parent
@@ -268,7 +296,7 @@ PanelWindow {
                   text: modelData.preview
                   font.family: "JetBrains Mono Nerd Font"
                   font.pixelSize: 12
-                  color: index === root.selectedIndex ? "#003257" : "#e1e2e8"
+                  color: index === root.selectedIndex ? MatugenColors.accentText : MatugenColors.text
                   Layout.fillWidth: true
                   Layout.fillHeight: true
                   wrapMode: Text.Wrap
@@ -282,7 +310,7 @@ PanelWindow {
                   visible: root.pinnedIds.includes(modelData.id)
                   font.family: "JetBrains Mono Nerd Font"
                   font.pixelSize: 10
-                  color: index === root.selectedIndex ? "#003257" : "#9fcafc"
+                  color: index === root.selectedIndex ? MatugenColors.accentText : MatugenColors.accent
                   opacity: 0.8
                 }
 
@@ -296,16 +324,16 @@ PanelWindow {
                     Layout.preferredWidth: 24
                     Layout.preferredHeight: 20
                     radius: 4
-                    color: pinArea.containsMouse ? "#9fcafc" : "transparent"
+                    color: pinArea.containsMouse ? MatugenColors.accent : "transparent"
                     border.width: 1
-                    border.color: index === root.selectedIndex ? "#003257" : "#9fcafc"
+                    border.color: index === root.selectedIndex ? MatugenColors.accentText : MatugenColors.accent
 
                     Text {
                       anchors.centerIn: parent
                       text: root.pinnedIds.includes(modelData.id) ? "󰐄" : "󰐃"
                       font.family: "JetBrains Mono Nerd Font"
                       font.pixelSize: 12
-                      color: pinArea.containsMouse ? "#003257" : (index === root.selectedIndex ? "#003257" : "#9fcafc")
+                      color: pinArea.containsMouse ? MatugenColors.accentText : (index === root.selectedIndex ? MatugenColors.accentText : MatugenColors.accent)
                     }
 
                     MouseArea {
@@ -321,16 +349,16 @@ PanelWindow {
                     Layout.preferredWidth: 24
                     Layout.preferredHeight: 20
                     radius: 4
-                    color: delArea.containsMouse ? "#9fcafc" : "transparent"
+                    color: delArea.containsMouse ? MatugenColors.accent : "transparent"
                     border.width: 1
-                    border.color: index === root.selectedIndex ? "#003257" : "#9fcafc"
+                    border.color: index === root.selectedIndex ? MatugenColors.accentText : MatugenColors.accent
 
                     Text {
                       anchors.centerIn: parent
-                      text: ""
+                      text: ""
                       font.family: "JetBrains Mono Nerd Font"
                       font.pixelSize: 12
-                      color: delArea.containsMouse ? "#003257" : (index === root.selectedIndex ? "#003257" : "#9fcafc")
+                      color: delArea.containsMouse ? MatugenColors.accentText : (index === root.selectedIndex ? MatugenColors.accentText : MatugenColors.accent)
                     }
 
                     MouseArea {
@@ -352,9 +380,10 @@ PanelWindow {
           height: 32
           anchors.horizontalCenter: parent.horizontalCenter
           anchors.bottom: parent.bottom
+          visible: root.filtered.length > 0
           gradient: Gradient {
-            GradientStop { position: 0.0; color: "#00101418" }
-            GradientStop { position: 1.0; color: "#101418" }
+            GradientStop { position: 0.0; color: Qt.rgba(MatugenColors.bgBase.r, MatugenColors.bgBase.g, MatugenColors.bgBase.b, 0) }
+            GradientStop { position: 1.0; color: MatugenColors.bgBase }
           }
         }
       }

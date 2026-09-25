@@ -20,7 +20,7 @@ hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("sh -c 'grim -g \"$(slurp)\" ~/Pictur
 
 -- Quickshell
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("quickshell -p ~/.config/quickshell/Lock.qml"))
-hl.bind(mainMod .. " + grave", hl.dsp.exec_cmd("quickshell -p ~/.config/quickshell/WallpaperPicker.qml"))
+hl.bind(mainMod .. " + grave", hl.dsp.exec_cmd("qs ipc call wallpaper toggle"))
 hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("qs ipc call network toggle"))
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("qs ipc call audio toggle"))
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("qs ipc call powermenu toggle"))
@@ -68,7 +68,7 @@ hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = tr
 -- INPUT
 hl.config({
     input = {
-        kb_layout  = "us",
+        kb_layout  = "us,jp",
         kb_variant = "",
         kb_model   = "",
         kb_options = "grp:alt_shift_toggle",

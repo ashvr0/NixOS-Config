@@ -1,0 +1,3 @@
+singleton SystemStats 1.0 SystemStats.qml
+singleton Cava 1.0 Cava.qml
+singleton MatugenColors 1.0 MatugenColors.qml

@@ -1,15 +1,10 @@
 { config, pkgs, inputs, ... }:
 let
   system = pkgs.stdenv.hostPlatform.system;
-
-  quickshell = inputs.quickshell;
-  awww = inputs.awww;
   nix-gaming = inputs.nix-gaming;
 in
 {
   environment.systemPackages = [
-      quickshell.packages.${system}.default
-      awww.packages.${system}.awww
       inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
     ]
     ++ (with pkgs; [
@@ -22,7 +17,6 @@ in
       tree-sitter
       pam
       python3
-      # Networking and security
       proton-vpn
       openvpn
 
@@ -31,13 +25,18 @@ in
       yt-dlp
       playerctl
       obsidian
+      obs-studio
 
       # Wayland and Hyprland ecosystem
       hypridle
+      hyprsunset
       slurp
       grim
       cliphist
-
+      brightnessctl
+      ddcutil
+      quickshell
+      
       # Terminal and shell
       alacritty
       fish
@@ -69,6 +68,8 @@ in
       papirus-icon-theme
       nordic
       matugen
+      mpvpaper
+      awww
 
       # fun tools
       fastfetch
@@ -79,14 +80,10 @@ in
       lavat
       pipes
 
-      # Games
+      # Games/Apps
       prismlauncher
       osu-lazer-bin
-
-      subfinder
-      httpx
-      ffuf
-      dig
-      mpvpaper
+      vesktop
+      steam
     ]);
 }

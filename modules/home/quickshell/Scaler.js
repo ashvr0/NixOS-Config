@@ -8,10 +8,6 @@ function getScale(mw, mh, userScale) {
     let rw = mw / 3840.0;
     let rh = mh / 2160.0;
     let r = Math.min(rw, rh);
-    // Blend the exponent smoothly through r=1.0 instead of hard-switching
-    // between 0.85 and 0.5. A hard switch matches in value at r=1 but not
-    // in slope, which shows up as a visible kink in scale right at 4K.
-    // Blending over a small window (0.85 <-> 1.15) removes that kink.
     let blendLo = 0.85, blendHi = 1.15;
     let t = Math.max(0, Math.min(1, (r - blendLo) / (blendHi - blendLo)));
     let smooth = t * t * (3 - 2 * t); // smoothstep

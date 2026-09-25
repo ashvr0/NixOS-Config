@@ -1,6 +1,8 @@
+pragma Singleton
 import QtQuick
 import Quickshell
 import "Scaler.js" as LayoutMath
+import "."
 
 Item {
     id: root

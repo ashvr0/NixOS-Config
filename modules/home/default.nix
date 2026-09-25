@@ -1,7 +1,6 @@
 { pkgs, inputs, username, ... }:
 
 let
-  awww = inputs.awww;
   system = pkgs.stdenv.hostPlatform.system;
 in
 {
@@ -17,6 +16,8 @@ in
     ./nvim/default.nix
     ./fastfetch/default.nix
     ./yazi.nix
+    inputs.serpantinum.homeManagerModules.default
+    ./serpantinum.nix
   ];
 
   home.username = username;
@@ -29,6 +30,5 @@ in
   home.packages = with pkgs; [
     wl-clipboard
     libnotify
-    awww.packages.${system}.awww
   ];
 }

@@ -1,20 +1,39 @@
 singleton Config 1.0 Config.qml
-singleton MatugenColors 1.0 MatugenColors.qml
+singleton Weather 1.0 Weather.qml
+singleton Scaler 1.0 Scaler.qml
+singleton Notifs 1.0 Notification/Notifs.qml
 
 Bar 1.0 Bar.qml
-Launcher 1.0 Launcher.qml
-Clipboard 1.0 Clipboard.qml
-Notification 1.0 Notification.qml
+WallpaperPicker 1.0 Wallpaper/WallpaperPicker.qml
+Launcher 1.0 Launchers/Launcher.qml
+Clipboard 1.0 Launchers/Clipboard.qml
+Notification 1.0 Notification/Notification.qml
 Workspaces 1.0 Workspaces.qml
 MusicPlayer 1.0 MusicPlayer.qml
-SystemStats 1.0 SystemStats.qml
 SystemTray 1.0 SystemTray.qml
-Scaler 1.0 Scaler.qml
 Power 1.0 Power.qml
-Settings 1.0 Settings.qml
 Audio 1.0 Audio.qml
 Bluetooth 1.0 Bluetooth.qml
-Calendar 1.0 Calendar.qml
+Calendar 1.0 Calendar/Calendar.qml
+CalendarBar 1.0 Calendar/CalendarBar.qml
 Keyboard 1.0 Keyboard.qml
 Network 1.0 Network.qml
 BarModulePill 1.0 BarModulePill.qml
+WeatherPopup 1.0 WeatherPopup.qml
+Settings 1.0 Settings/Settings.qml
+GeneralTab 1.0 Settings/GeneralTab.qml
+BarTab 1.0 Settings/BarTab.qml
+AppearanceTab 1.0 Settings/AppearanceTab.qml
+KeybindsTab 1.0 Settings/KeybindsTab.qml
+DisplayTab 1.0 Settings/DisplayTab.qml
+AboutTab 1.0 Settings/AboutTab.qml
+NotifactionTab 1.0 Settings/NotifactionTab.qml
+TraySystemMenu 1.0 TraySystemMenu.qml
+DesktopWidgets 1.0 Widgets/DesktopWidgets.qml
+DesktopWidgetFrame 1.0 Widgets/DesktopWidgetFrame.qml
+DesktopClockWidget 1.0 Widgets/DesktopClockWidget.qml
+DesktopMusicWidget 1.0 Widgets/DesktopMusicWidget.qml
+DesktopWeatherWidget 1.0 Widgets/DesktopWeatherWidget.qml
+DesktopCalendarWidget 1.0 Widgets/DesktopCalendarWidget.qml
+DesktopImageWidget 1.0 Widgets/DesktopImageWidget.qml
+FilePickerDialog 1.0 FilePickerDialog.qml

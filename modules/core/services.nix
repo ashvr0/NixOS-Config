@@ -22,4 +22,7 @@
   security.polkit.enable = true;
   hardware.bluetooth.enable = true;
   services.power-profiles-daemon.enable = true;
+
+  services.desktopManager.plasma6.enable = true;
+
 }
