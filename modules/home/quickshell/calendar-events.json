@@ -1,11 +1,11 @@
 {
   "events": [
     {
-      "id": "ev_1790233898173_9735",
-      "title": "test",
-      "allDay": false,
-      "startDate": "2026-09-23",
-      "endDate": "2026-09-23",
+      "id": "ev_1794549235757_3638",
+      "title": "GTA VI",
+      "allDay": true,
+      "startDate": "2026-11-18",
+      "endDate": "2026-11-18",
       "startMin": 540,
       "endMin": 600,
       "color": "#f87171",
@@ -14,7 +14,16 @@
       "repeat": {
         "freq": "none"
       },
-      "reminders": []
+      "reminders": [
+        {
+          "amount": 1,
+          "unit": "days"
+        },
+        {
+          "amount": 2,
+          "unit": "days"
+        }
+      ]
     }
   ]
 }

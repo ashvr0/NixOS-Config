@@ -91,7 +91,7 @@ Item {
     spacing: 16 * Config.uiScale
 
     Item {
-      width: 56 * Config.uiScale; height: calendarModuleV.implicitWidth + 14 * Config.uiScale
+      width: 56 * Config.uiScale; height: calendarModuleV.implicitHeight + 14 * Config.uiScale
 
       MouseArea {
         id: calHoverBgV

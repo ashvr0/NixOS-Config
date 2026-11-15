@@ -2,6 +2,8 @@ import QtQuick
 import Quickshell
 import "."
 import "Widgets" as Widgets
+import "Bar"
+import "Singletons"
 
 ShellRoot {
     Bar {}

@@ -1,0 +1,731 @@
+pragma Singleton
+import QtQuick
+import Quickshell
+import Quickshell.Io
+
+Item {
+    id: config
+
+    readonly property string homeDir: Quickshell.env("HOME")
+    readonly property string hyprConf: homeDir + "/.config/hypr/keybinds.lua"
+    readonly property string keybindNamesPath: homeDir + "/.config/quickshell/keybind_names.json"
+    readonly property string settingsPath: homeDir + "/.local/state/quickshell/settings.json"
+    property string nightLightMode: "Never"
+    property string nightLightFrom: "20:00"
+    property string nightLightTo: "07:00"
+    property int autoLockSeconds: 300
+    property string wallpaperDir: homeDir + "/Pictures/Wallpapers"
+    property string mainMod: "SUPER"
+    property int workspaceCount: 6
+    property string workspaceStyle: "numbers"
+    property real uiScale: 1.0
+    property bool tempUnitFahrenheit: false
+    property string weatherLocation: ""
+    property string weatherLocationMode: "auto"   // "auto" (IP) | "city" | "coords"
+    property string weatherGeoCache: ""           // JSON {lat, lon, name} for auto + coords modes
+    property int weatherPollMinutes: 15
+    property string profilePicturePath: ""
+    property bool showClockSeconds: false
+    property bool clock24h: false
+    property bool showClockDate: true
+    property string clockFormat: ""
+    property bool hideEmptyWorkspaces: false
+    property string mediaSecondaryInfo: "duration"
+    property int mediaWidth: 150
+    property bool mediaShowIcon: true
+    property bool mediaShowControls: true
+    property string notifPosition: "top-right"
+    property bool notifSound: true
+    property string notifSoundFile: ""
+    property bool notifHideLockDescription: false
+    property string barPosition: "top"
+    readonly property bool barVertical: barPosition === "left" || barPosition === "right"
+    property bool autoHideBar: false
+    property int autoHideDelayMs: 1000
+    property int barWidthPercent: 100
+    property int barOpacityPercent: 100
+    property string barStyle: "solid"
+    readonly property bool solidBarActive: barStyle === "solid" || barStyle === "fill"
+    property bool showGuideButton: false
+    property string fontFamily: "JetBrainsMono Nerd Font"
+    property int uiRadius: 10
+    property string launcherPosition: "center"
+    property int launcherWidth: 750
+    property int launcherVisibleItems: 6
+    property bool launcherSmartSort: true
+    property string launcherSearchProvider: "google"
+    property string colorScheme: "matugen"
+    property bool desktopEditMode: false
+    property var desktopWidgets: []
+    property bool desktopSnapToGrid: false
+    property string desktopSelectedWidgetId: ""
+  property string wallpaperTransitionMode: "random"          // random | custom
+  property string wallpaperTransitionSet: "fade,wipe,circle,swipe"
+  property real wallpaperFadeDuration: 0.7
+  property real wallpaperWipeDuration: 0.7
+  property string wallpaperWipeOrientation: "random"         // random | horizontal | vertical
+  property real wallpaperCircleDuration: 0.7
+  property string wallpaperCircleOrigin: "random"            // random | center
+  property real wallpaperSwipeDuration: 0.7
+  property string wallpaperSwipeDirection: "random"          // random | left | right | top | bottom | top-left | top-right | bottom-left | bottom-right
+
+        readonly property var desktopWidgetTypes: [
+        { type: "clock", label: "Clock", icon: "\uf017", w: 640, h: 340, minW: 200, minH: 120, maxW: 900, maxH: 500 },
+        { type: "calendar", label: "Calendar", icon: "\uf133", w: 320, h: 340, minW: 220, minH: 200, maxW: 800, maxH: 700 },
+        { type: "musicplayer", label: "Music", icon: "\uf001", w: 646, h: 227, variant: "wide", minW: 300, minH: 160, maxW: 800, maxH: 300 },
+        { type: "weather", label: "Weather", icon: "\uf0c2", w: 300, h: 300, minW: 180, minH: 180, maxW: 600, maxH: 500 },
+        { type: "image", label: "Image", icon: "\uf03e", w: 500, h: 300, minW: 120, minH: 120, maxW: 1200, maxH: 1200 },
+        { type: "systemstat", label: "System Stat", icon: "\uf2db", w: 220, h: 160, minW: 140, minH: 100, maxW: 600, maxH: 400 },
+        { type: "cava", label: "Audio Visualizer", icon: "\uf001", w: 1920, h: 180, minW: 50, minH: 50, maxW: 9999, maxH: 9999 }
+    ]
+
+    readonly property var systemStatVariants: [
+        { variant: "cpu", label: "CPU" },
+        { variant: "ram", label: "RAM" },
+        { variant: "temp", label: "Temp" },
+        { variant: "disk", label: "Disk" },
+        { variant: "battery", label: "Battery" }
+    ]
+
+    readonly property var clockVariants: [
+        { size: "digital", label: "Digital", w: 640, h: 340 },
+        { size: "analog", label: "Analog", w: 470, h: 370 },
+        { size: "minimal", label: "Minimal", w: 400, h: 160 }
+    ]
+
+    readonly property var weatherSizePresets: [
+        { size: "small", label: "Small", w: 250, h: 250 },
+        { size: "medium", label: "Medium", w: 460, h: 220 },
+        { size: "large", label: "Large", w: 500, h: 340 }
+    ]
+
+    readonly property var calendarVariants: [
+        { variant: "month", label: "Month Grid", w: 320, h: 340 },
+        { variant: "small", label: "Small", w: 250, h: 250 },
+        { variant: "wide", label: "Wide", w: 700, h: 227 },
+        { variant: "date", label: "Date Only", w: 250, h: 250 }
+    ]
+
+    readonly property var musicVariants: [
+        { variant: "wide", label: "Wide", w: 646, h: 227 },
+        { variant: "large", label: "Large", w: 360, h: 560 }
+    ]
+
+        function addDesktopWidget(type, x, y) {
+        let def = config.desktopWidgetTypes.find(t => t.type === type)
+        let w = def ? def.w : 300
+        let h = def ? def.h : 200
+        let list = config.desktopWidgets.slice()
+        let widget = { id: "w_" + Date.now() + "_" + Math.floor(Math.random() * 10000), type: type, x: x, y: y, w: w, h: h, opacity: 1.0, rotation: 0 }
+        if (type === "clock") widget.variant = "digital"
+        if (type === "calendar") widget.variant = "month"
+        if (type === "musicplayer") widget.variant = "wide"
+        if (type === "weather") widget.size = "small"
+        if (type === "image") widget.imagePath = ""
+        if (type === "systemstat") widget.variant = "cpu"
+        list.push(widget)
+        config.desktopWidgets = list
+        config.saveSettings()
+    }
+    function updateDesktopWidget(id, patch) {
+        config.desktopWidgets = config.desktopWidgets.map(w => w.id === id ? Object.assign({}, w, patch) : w)
+        config.saveSettings()
+    }
+    function removeDesktopWidget(id) {
+        config.desktopWidgets = config.desktopWidgets.filter(w => w.id !== id)
+        config.saveSettings()
+    }
+
+    readonly property var themePresets: ({
+        "matugen": null,
+        "mocha": {
+            bgBase: "#1e1e2e", bgElevated: "#181825", bgElevated2: "#11111b",
+            border: "#6c7086", borderSoft: "#45475a",
+            text: "#cdd6f4", textMuted: "#a6adc8", textDim: "#9399b2",
+            accent: "#89b4fa", accentText: "#1e1e2e", accentSoft: "#1e3a5f",
+            error: "#f38ba8", warning: "#f9e2af"
+        },
+        "latte": {
+            bgBase: "#eff1f5", bgElevated: "#e6e9ef", bgElevated2: "#dce0e8",
+            border: "#9ca0b0", borderSoft: "#acb0be",
+            text: "#4c4f69", textMuted: "#5c5f77", textDim: "#6c6f85",
+            accent: "#1e66f5", accentText: "#eff1f5", accentSoft: "#c4d9fb",
+            error: "#d20f39", warning: "#df8e1d"
+        },
+        "tokyonight": {
+            bgBase: "#1a1b26", bgElevated: "#16161e", bgElevated2: "#13131a",
+            border: "#565f89", borderSoft: "#3b3f57",
+            text: "#c0caf5", textMuted: "#9aa5ce", textDim: "#787c99",
+            accent: "#7aa2f7", accentText: "#1a1b26", accentSoft: "#2a3457",
+            error: "#f7768e", warning: "#e0af68"
+        },
+        "gruvbox": {
+            bgBase: "#282828", bgElevated: "#1d2021", bgElevated2: "#32302f",
+            border: "#a89984", borderSoft: "#504945",
+            text: "#ebdbb2", textMuted: "#d5c4a1", textDim: "#bdae93",
+            accent: "#fe8019", accentText: "#282828", accentSoft: "#4a3728",
+            error: "#fb4934", warning: "#fabd2f"
+        },
+        "obsidian": {
+            bgBase: "#22272e", bgElevated: "#1c2128", bgElevated2: "#161b22",
+            border: "#768390", borderSoft: "#444c56",
+            text: "#adbac7", textMuted: "#909dab", textDim: "#768390",
+            accent: "#539bf5", accentText: "#22272e", accentSoft: "#264b6d",
+            error: "#e5534b", warning: "#daaa3f"
+        },
+        "flexokidark": {
+            bgBase: "#100f0f", bgElevated: "#1c1b1a", bgElevated2: "#282726",
+            border: "#878580", borderSoft: "#575653",
+            text: "#cecdc3", textMuted: "#b7b5ac", textDim: "#878580",
+            accent: "#4385be", accentText: "#100f0f", accentSoft: "#20342f",
+            error: "#d14d41", warning: "#d0a215"
+        },
+        "vesper": {
+            bgBase: "#101010", bgElevated: "#161616", bgElevated2: "#1c1c1c",
+            border: "#8f8f8f", borderSoft: "#3a3a3a",
+            text: "#ffffff", textMuted: "#a0a0a0", textDim: "#7e7e7e",
+            accent: "#ffc799", accentText: "#101010", accentSoft: "#4a3d2f",
+            error: "#f5a191", warning: "#ffc799"
+        },
+        "cyberpunk": {
+            bgBase: "#0d0221", bgElevated: "#170a33", bgElevated2: "#1f0f42",
+            border: "#ff2a6d", borderSoft: "#5a1f6b",
+            text: "#f2e9ff", textMuted: "#c9b8e8", textDim: "#9d84c4",
+            accent: "#05d9e8", accentText: "#0d0221", accentSoft: "#0a3a42",
+            error: "#ff2a6d", warning: "#f9c80e"
+        },
+        "githubdark": {
+            bgBase: "#0d1117", bgElevated: "#161b22", bgElevated2: "#010409",
+            border: "#8b949e", borderSoft: "#30363d",
+            text: "#c9d1d9", textMuted: "#b1bac4", textDim: "#8b949e",
+            accent: "#58a6ff", accentText: "#0d1117", accentSoft: "#1f3b57",
+            error: "#f85149", warning: "#d29922"
+        },
+        "ayudark": {
+            bgBase: "#0a0e14", bgElevated: "#0d1017", bgElevated2: "#131721",
+            border: "#8a9199", borderSoft: "#33415e",
+            text: "#b3b1ad", textMuted: "#9ca3af", textDim: "#6b7280",
+            accent: "#39bae6", accentText: "#0a0e14", accentSoft: "#1b3a4a",
+            error: "#f26d78", warning: "#ffb454"
+        },
+        "nightowl": {
+            bgBase: "#011627", bgElevated: "#0b2942", bgElevated2: "#01111d",
+            border: "#5f7e97", borderSoft: "#1d3b53",
+            text: "#d6deeb", textMuted: "#a7bed3", textDim: "#637777",
+            accent: "#82aaff", accentText: "#011627", accentSoft: "#1d3b6b",
+            error: "#ef5350", warning: "#addb67"
+        },
+        "materialocean": {
+            bgBase: "#0f111a", bgElevated: "#181a24", bgElevated2: "#1f222d",
+            border: "#717cb4", borderSoft: "#3b3f51",
+            text: "#a6accd", textMuted: "#8f94ab", textDim: "#676e95",
+            accent: "#82aaff", accentText: "#0f111a", accentSoft: "#1e3a5f",
+            error: "#ff5370", warning: "#ffcb6b"
+        },
+        "horizon": {
+            bgBase: "#1c1e26", bgElevated: "#232530", bgElevated2: "#16161c",
+            border: "#6c6f93", borderSoft: "#2e303e",
+            text: "#e0e0e0", textMuted: "#cbc9e2", textDim: "#6c6f93",
+            accent: "#e95678", accentText: "#1c1e26", accentSoft: "#4a2536",
+            error: "#e95678", warning: "#fab795"
+        },
+        "monokai": {
+            bgBase: "#272822", bgElevated: "#1e1f1c", bgElevated2: "#2d2e27",
+            border: "#948d70", borderSoft: "#49483e",
+            text: "#f8f8f2", textMuted: "#cfcfc2", textDim: "#75715e",
+            accent: "#66d9ef", accentText: "#272822", accentSoft: "#1f4d54",
+            error: "#f92672", warning: "#e6db74"
+        },
+        "kanagawa": {
+            bgBase: "#1f1f28", bgElevated: "#16161d", bgElevated2: "#2a2a37",
+            border: "#727169", borderSoft: "#54546d",
+            text: "#dcd7ba", textMuted: "#c8c093", textDim: "#727169",
+            accent: "#7e9cd8", accentText: "#1f1f28", accentSoft: "#2d3b53",
+            error: "#e82424", warning: "#dca561"
+        }
+    })
+    property var themeChoices: [
+        { id: "matugen", label: "Matugen (wallpaper)" },
+        { id: "mocha", label: "Catppuccin Mocha" },
+        { id: "latte", label: "Catppuccin Latte" },
+        { id: "tokyonight", label: "Tokyo Night" },
+        { id: "gruvbox", label: "Gruvbox" },
+        { id: "obsidian", label: "Obsidian" },
+        { id: "flexokidark", label: "Flexoki Dark" },
+        { id: "vesper", label: "Vesper" },
+        { id: "cyberpunk", label: "Cyberpunk" },
+        { id: "githubdark", label: "GitHub Dark" },
+        { id: "ayudark", label: "Ayu Dark" },
+        { id: "nightowl", label: "Night Owl" },
+        { id: "materialocean", label: "Material Ocean" },
+        { id: "horizon", label: "Horizon" },
+        { id: "monokai", label: "Monokai" },
+        { id: "kanagawa", label: "Kanagawa" }
+    ]
+    function defaultBarLayout() {
+        return { left: ["launcher", "workspaces"], center: ["musicplayer"], right: ["systemtray", "keyboard", "volume", "network", "bluetooth", "weather", "systemstats", "settings", "power"] }
+    }
+    property var barLayout: config.defaultBarLayout()
+    property var barGroups: ({})
+    property var barGroupColors: ({})
+    function setBarGroups(groups, colors) {
+        config.barGroups = groups
+        config.barGroupColors = colors
+        config.saveSettings()
+    }
+    function pruneBarGroups() {
+        let placed = {}
+        for (const id of [].concat(config.barLayout.left, config.barLayout.center, config.barLayout.right)) placed[id] = true
+        let groups = config.barGroups
+        let changed = false
+        let survivingGroupIds = {}
+        for (const id of Object.keys(groups)) {
+            if (!placed[id]) { delete groups[id]; changed = true }
+            else survivingGroupIds[groups[id]] = true
+        }
+        let colors = config.barGroupColors
+        for (const gId of Object.keys(colors)) {
+            if (!survivingGroupIds[gId]) { delete colors[gId]; changed = true }
+        }
+        if (changed) config.setBarGroups(groups, colors)
+    }
+    readonly property var allBarModules: [
+        { id: "launcher", label: "Launcher" },
+        { id: "workspaces", label: "Workspaces" },
+        { id: "musicplayer", label: "Music Player" },
+        { id: "keyboard", label: "Keyboard" },
+        { id: "systemtray", label: "Tray" },
+        { id: "bluetooth", label: "Bluetooth" },
+        { id: "network", label: "Network" },
+        { id: "weather", label: "Weather" },
+        { id: "systemstats", label: "System Stats" },
+        { id: "volume", label: "Volume" },
+        { id: "settings", label: "Settings" },
+        { id: "power", label: "Power" },
+        { id: "guidebutton", label: "Guide Button" }
+    ]
+    function barModuleLabel(id) {
+        let m = config.allBarModules.find(m => m.id === id)
+        return m ? m.label : id
+    }
+    function unplacedBarModules() {
+        let placed = [].concat(config.barLayout.left, config.barLayout.center, config.barLayout.right)
+        return config.allBarModules.map(m => m.id).filter(id => id !== "guidebutton" && !placed.includes(id))
+    }
+    function setBarLayout(layout) {
+        config.barLayout = layout
+        config.saveSettings()
+    }
+    property var keybindNameOverrides: ({})
+
+    function friendlyKeybindName(dispatcher, args) {
+        let d = (dispatcher || "").trim()
+        let a = (args || "").trim().replace(/^["']|["']$/g, "")
+        if (d === "exec_cmd" || d === "exec") return a.split(" ")[0].split("/").pop()
+        if (d.includes("close")) return "Close window"
+        if (d.includes("float")) return "Toggle floating"
+        if (d.includes("fullscreen")) return "Fullscreen"
+        if (d.includes("focus")) return "Focus " + a
+        if (d.includes("move")) return "Move " + a
+        if (d.includes("resize")) return "Resize " + a
+        if (a) return d + " " + a
+        return d || "Keybind"
+    }
+
+    Process {
+        id: keybindNamesLoadProc
+        command: ["cat", config.keybindNamesPath]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try { config.keybindNameOverrides = JSON.parse(this.text) } catch (e) { config.keybindNameOverrides = {} }
+            }
+        }
+    }
+    function loadKeybindNames() { keybindNamesLoadProc.running = false; keybindNamesLoadProc.running = true }
+
+    function setKeybindName(lineNum, name) {
+        let overrides = Object.assign({}, config.keybindNameOverrides)
+        overrides[String(lineNum)] = name
+        config.keybindNameOverrides = overrides
+        let json = JSON.stringify(overrides)
+        Quickshell.execDetached(["bash", "-c",
+            "mkdir -p '" + config.homeDir + "/.config/quickshell' && cat > '" + config.keybindNamesPath + "' << 'KBEOF'\n" + json + "\nKBEOF"])
+    }
+
+    Component.onCompleted: {
+        config.loadKeybindNames()
+        config.loadSettings()
+    }
+
+    property bool _loadingSettings: false
+    property bool _writePending: false
+
+    Process {
+        id: settingsLoadProc
+        command: ["cat", config.settingsPath]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                config._loadingSettings = true
+                try {
+                    let data = JSON.parse(this.text)
+                    if (data.wallpaperDir !== undefined)
+    config.wallpaperDir = data.wallpaperDir
+
+if (data.mainMod !== undefined)
+    config.mainMod = data.mainMod
+
+if (data.uiScale !== undefined)
+    config.uiScale = data.uiScale
+
+if (data.workspaceCount !== undefined)
+    config.workspaceCount = data.workspaceCount
+
+if (data.workspaceStyle !== undefined)
+    config.workspaceStyle = data.workspaceStyle
+
+if (data.barPosition !== undefined)
+    config.barPosition = ["top", "bottom", "left", "right"].includes(data.barPosition) ? data.barPosition : "top"
+
+if (data.notifPosition !== undefined)
+    config.notifPosition = ["top-right", "top-left", "top-center", "bottom-right", "bottom-left", "bottom-center", "top", "bottom"].includes(data.notifPosition) ? data.notifPosition : "top-right"
+
+if (data.notifSound !== undefined)
+    config.notifSound = data.notifSound
+
+if (data.notifSoundFile !== undefined)
+    config.notifSoundFile = data.notifSoundFile
+
+if (data.notifHideLockDescription !== undefined)
+    config.notifHideLockDescription = data.notifHideLockDescription
+
+if (data.autoHideBar !== undefined)
+    config.autoHideBar = data.autoHideBar
+
+if (data.autoHideDelayMs !== undefined)
+    config.autoHideDelayMs = Math.max(250, Math.min(10000, data.autoHideDelayMs))
+
+if (data.barWidthPercent !== undefined)
+    config.barWidthPercent = data.barWidthPercent
+
+if (data.barOpacityPercent !== undefined)
+    config.barOpacityPercent = data.barOpacityPercent
+
+if (data.barStyle !== undefined)
+   config.barStyle = data.barStyle === "Fill" ? "fill" : data.barStyle
+
+if (data.showGuideButton !== undefined)
+    config.showGuideButton = data.showGuideButton
+
+if (data.showClockSeconds !== undefined)
+    config.showClockSeconds = data.showClockSeconds
+
+if (data.clock24h !== undefined)
+    config.clock24h = data.clock24h
+
+if (data.showClockDate !== undefined)
+    config.showClockDate = data.showClockDate
+
+if (data.clockFormat !== undefined)
+    config.clockFormat = data.clockFormat
+
+if (data.hideEmptyWorkspaces !== undefined)
+    config.hideEmptyWorkspaces = data.hideEmptyWorkspaces
+
+if (data.mediaSecondaryInfo !== undefined)
+    config.mediaSecondaryInfo = ["duration", "author"].includes(data.mediaSecondaryInfo) ? data.mediaSecondaryInfo : "duration"
+
+if (data.mediaWidth !== undefined)
+    config.mediaWidth = Math.max(80, Math.min(300, data.mediaWidth))
+
+if (data.mediaShowIcon !== undefined)
+    config.mediaShowIcon = data.mediaShowIcon
+
+if (data.mediaShowControls !== undefined)
+    config.mediaShowControls = data.mediaShowControls
+
+if (data.fontFamily !== undefined)
+    config.fontFamily = data.fontFamily
+
+if (data.uiRadius !== undefined)
+    config.uiRadius = data.uiRadius
+
+if (data.colorScheme !== undefined)
+    config.colorScheme = data.colorScheme
+
+if (data.launcherPosition !== undefined)
+    config.launcherPosition = ["top", "bottom", "left", "right", "center"].includes(data.launcherPosition) ? data.launcherPosition : "center"
+
+if (data.launcherWidth !== undefined)
+    config.launcherWidth = Math.max(300, Math.min(1200, data.launcherWidth))
+
+if (data.launcherVisibleItems !== undefined)
+    config.launcherVisibleItems = Math.max(3, Math.min(12, data.launcherVisibleItems))
+
+if (data.launcherSmartSort !== undefined)
+    config.launcherSmartSort = data.launcherSmartSort
+
+if (data.launcherSearchProvider !== undefined)
+    config.launcherSearchProvider = String(data.launcherSearchProvider)
+
+if (data.desktopWidgets !== undefined)
+    config.desktopWidgets = (data.desktopWidgets || []).filter(w =>
+        w && typeof w === "object" &&
+        w.id !== undefined && w.type !== undefined &&
+        w.x !== undefined && w.y !== undefined &&
+        w.w !== undefined && w.h !== undefined
+    )
+
+if (data.desktopSnapToGrid !== undefined)
+    config.desktopSnapToGrid = data.desktopSnapToGrid
+
+if (data.weatherLocation !== undefined)
+    config.weatherLocation = data.weatherLocation
+
+if (data.weatherLocationMode !== undefined)
+    config.weatherLocationMode = ["auto", "city", "coords"].includes(data.weatherLocationMode) ? data.weatherLocationMode : "auto"
+
+if (data.weatherGeoCache !== undefined)
+    config.weatherGeoCache = data.weatherGeoCache
+
+if (data.weatherPollMinutes !== undefined)
+    config.weatherPollMinutes = Math.max(1, Math.min(1440, data.weatherPollMinutes))
+
+if (data.tempUnitFahrenheit !== undefined)
+    config.tempUnitFahrenheit = data.tempUnitFahrenheit
+
+if (data.profilePicturePath !== undefined)
+    config.profilePicturePath = data.profilePicturePath
+
+if (data.wallpaperTransitionMode !== undefined)
+    config.wallpaperTransitionMode = ["random", "custom"].includes(data.wallpaperTransitionMode) ? data.wallpaperTransitionMode : "random"
+
+if (data.wallpaperTransitionSet !== undefined)
+    config.wallpaperTransitionSet = String(data.wallpaperTransitionSet)
+
+if (data.wallpaperFadeDuration !== undefined && !isNaN(Number(data.wallpaperFadeDuration)))
+    config.wallpaperFadeDuration = Number(data.wallpaperFadeDuration)
+
+if (data.wallpaperWipeDuration !== undefined && !isNaN(Number(data.wallpaperWipeDuration)))
+    config.wallpaperWipeDuration = Number(data.wallpaperWipeDuration)
+
+if (data.wallpaperWipeOrientation !== undefined)
+    config.wallpaperWipeOrientation = String(data.wallpaperWipeOrientation)
+
+if (data.wallpaperCircleDuration !== undefined && !isNaN(Number(data.wallpaperCircleDuration)))
+    config.wallpaperCircleDuration = Number(data.wallpaperCircleDuration)
+
+if (data.wallpaperCircleOrigin !== undefined)
+    config.wallpaperCircleOrigin = String(data.wallpaperCircleOrigin)
+
+if (data.wallpaperSwipeDuration !== undefined && !isNaN(Number(data.wallpaperSwipeDuration)))
+    config.wallpaperSwipeDuration = Number(data.wallpaperSwipeDuration)
+
+if (data.wallpaperSwipeDirection !== undefined)
+    config.wallpaperSwipeDirection = String(data.wallpaperSwipeDirection)
+
+if (data.nightLightMode !== undefined)
+    config.nightLightMode = String(data.nightLightMode)
+
+if (data.nightLightFrom !== undefined)
+    config.nightLightFrom = String(data.nightLightFrom)
+
+if (data.nightLightTo !== undefined)
+    config.nightLightTo = String(data.nightLightTo)
+
+if (data.autoLockSeconds !== undefined && !isNaN(Number(data.autoLockSeconds)))
+    config.autoLockSeconds = Number(data.autoLockSeconds)
+
+if (data.barLayout !== undefined) {
+    let loaded = data.barLayout
+    let seen = {}
+    function dedupZone(zone) {
+        return (zone || []).filter(id => {
+            if (seen[id]) return false
+            seen[id] = true
+            return true
+        })
+    }
+    loaded = { left: dedupZone(loaded.left), center: dedupZone(loaded.center), right: dedupZone(loaded.right) }
+    let known = config.allBarModules.map(m => m.id).filter(id => id !== "guidebutton")
+    for (const id of known) {
+        if (!seen[id]) {
+            loaded.right.push(id)
+            seen[id] = true
+        }
+    }
+    config.barLayout = loaded
+}
+
+if (data.barGroups !== undefined)
+    config.barGroups = data.barGroups
+
+if (data.barGroupColors !== undefined)
+    config.barGroupColors = data.barGroupColors
+                } catch (e) {}
+                config._loadingSettings = false
+            }
+        }
+    }
+    function loadSettings() { settingsLoadProc.running = false; settingsLoadProc.running = true }
+Timer {
+    id: saveDebounce
+    interval: 150
+    onTriggered: config._writeSettingsNow()
+}
+function saveSettings() {
+    if (config._loadingSettings) return
+    saveDebounce.restart()
+}
+
+Process {
+    id: settingsWriteProc
+    onExited: {
+        if (config._writePending) config._writeSettingsNow()
+    }
+    stdout: StdioCollector {
+        onStreamFinished: if (this.text.trim()) console.log("[Config] write stdout:", this.text)
+    }
+    stderr: StdioCollector {
+        onStreamFinished: if (this.text.trim()) console.log("[Config] write stderr:", this.text)
+    }
+}
+
+function _settingsCommand() {
+    let json = JSON.stringify({
+        wallpaperDir: config.wallpaperDir,
+        mainMod: config.mainMod,
+        uiScale: config.uiScale,
+        workspaceCount: config.workspaceCount,
+        workspaceStyle: config.workspaceStyle,
+        barPosition: config.barPosition,
+        notifPosition: config.notifPosition,
+        notifSound: config.notifSound,
+        notifSoundFile: config.notifSoundFile,
+        notifHideLockDescription: config.notifHideLockDescription,
+        autoHideBar: config.autoHideBar,
+        autoHideDelayMs: config.autoHideDelayMs,
+        barWidthPercent: config.barWidthPercent,
+        barOpacityPercent: config.barOpacityPercent,
+        barStyle: config.barStyle,
+        showGuideButton: config.showGuideButton,
+        showClockSeconds: config.showClockSeconds,
+        clock24h: config.clock24h,
+        showClockDate: config.showClockDate,
+        clockFormat: config.clockFormat,
+        hideEmptyWorkspaces: config.hideEmptyWorkspaces,
+        mediaSecondaryInfo: config.mediaSecondaryInfo,
+        mediaWidth: config.mediaWidth,
+        mediaShowIcon: config.mediaShowIcon,
+        mediaShowControls: config.mediaShowControls,
+        fontFamily: config.fontFamily,
+        uiRadius: config.uiRadius,
+        launcherPosition: config.launcherPosition,
+        launcherWidth: config.launcherWidth,
+        launcherVisibleItems: config.launcherVisibleItems,
+        launcherSmartSort: config.launcherSmartSort,
+        launcherSearchProvider: config.launcherSearchProvider,
+        colorScheme: config.colorScheme,
+        barLayout: config.barLayout,
+        barGroups: config.barGroups,
+        barGroupColors: config.barGroupColors,
+        desktopWidgets: config.desktopWidgets,
+        desktopSnapToGrid: config.desktopSnapToGrid,
+        weatherLocation: config.weatherLocation,
+        weatherLocationMode: config.weatherLocationMode,
+        weatherGeoCache: config.weatherGeoCache,
+        weatherPollMinutes: config.weatherPollMinutes,
+        tempUnitFahrenheit: config.tempUnitFahrenheit,
+        profilePicturePath: config.profilePicturePath,
+        wallpaperTransitionMode: config.wallpaperTransitionMode,
+        wallpaperTransitionSet: config.wallpaperTransitionSet,
+        wallpaperFadeDuration: config.wallpaperFadeDuration,
+        wallpaperWipeDuration: config.wallpaperWipeDuration,
+        wallpaperWipeOrientation: config.wallpaperWipeOrientation,
+        wallpaperCircleDuration: config.wallpaperCircleDuration,
+        wallpaperCircleOrigin: config.wallpaperCircleOrigin,
+        wallpaperSwipeDuration: config.wallpaperSwipeDuration,
+        wallpaperSwipeDirection: config.wallpaperSwipeDirection,
+        nightLightMode: config.nightLightMode,
+        nightLightFrom: config.nightLightFrom,
+        nightLightTo: config.nightLightTo,
+        autoLockSeconds: config.autoLockSeconds
+    }, null, 2)
+
+    return ["bash", "-c",
+        "mkdir -p \"$(dirname '" + config.settingsPath + "')\" && cat > '" + config.settingsPath + ".tmp' << 'STEOF'\n" + json + "\nSTEOF\nmv '" + config.settingsPath + ".tmp' '" + config.settingsPath + "'"]
+}
+
+// Never kill a write that is running. Remember that a newer one is wanted and run it after.
+function _writeSettingsNow() {
+    if (settingsWriteProc.running) {
+        config._writePending = true
+        return
+    }
+    config._writePending = false
+    settingsWriteProc.command = config._settingsCommand()
+    settingsWriteProc.running = true
+}
+
+// A reload inside the debounce window would lose the last change, so flush it.
+Component.onDestruction: {
+    if (saveDebounce.running || config._writePending) {
+        saveDebounce.stop()
+        Quickshell.execDetached(config._settingsCommand())
+    }
+}
+    onWallpaperDirChanged: config.saveSettings()
+    onMainModChanged: config.saveSettings()
+    onUiScaleChanged: config.saveSettings()
+    onWorkspaceCountChanged: config.saveSettings()
+    onWorkspaceStyleChanged: config.saveSettings()
+    onBarPositionChanged: config.saveSettings()
+    onNotifPositionChanged: config.saveSettings()
+    onNotifSoundChanged: config.saveSettings()
+    onNotifSoundFileChanged: config.saveSettings()
+    onNotifHideLockDescriptionChanged: config.saveSettings()
+    onAutoHideBarChanged: config.saveSettings()
+    onAutoHideDelayMsChanged: config.saveSettings()
+    onBarWidthPercentChanged: config.saveSettings()
+    onBarOpacityPercentChanged: config.saveSettings()
+    onBarStyleChanged: config.saveSettings()
+    onShowGuideButtonChanged: config.saveSettings()
+    onShowClockSecondsChanged: config.saveSettings()
+    onClock24hChanged: config.saveSettings()
+    onShowClockDateChanged: config.saveSettings()
+    onClockFormatChanged: config.saveSettings()
+    onHideEmptyWorkspacesChanged: config.saveSettings()
+    onMediaSecondaryInfoChanged: config.saveSettings()
+    onMediaWidthChanged: config.saveSettings()
+    onMediaShowIconChanged: config.saveSettings()
+    onMediaShowControlsChanged: config.saveSettings()
+    onFontFamilyChanged: config.saveSettings()
+    onUiRadiusChanged: config.saveSettings()
+    onLauncherPositionChanged: config.saveSettings()
+    onLauncherWidthChanged: config.saveSettings()
+    onLauncherVisibleItemsChanged: config.saveSettings()
+    onLauncherSmartSortChanged: config.saveSettings()
+    onLauncherSearchProviderChanged: config.saveSettings()
+    onColorSchemeChanged: config.saveSettings()
+    onDesktopWidgetsChanged: config.saveSettings()
+    onDesktopSnapToGridChanged: config.saveSettings()
+    onWeatherLocationChanged: config.saveSettings()
+    onWeatherLocationModeChanged: config.saveSettings()
+    onWeatherGeoCacheChanged: config.saveSettings()
+    onWeatherPollMinutesChanged: config.saveSettings()
+    onTempUnitFahrenheitChanged: config.saveSettings()
+    onProfilePicturePathChanged: config.saveSettings()
+    onBarLayoutChanged: config.saveSettings()
+    onWallpaperTransitionModeChanged: config.saveSettings()
+    onWallpaperTransitionSetChanged: config.saveSettings()
+    onWallpaperFadeDurationChanged: config.saveSettings()
+    onWallpaperWipeDurationChanged: config.saveSettings()
+    onWallpaperWipeOrientationChanged: config.saveSettings()
+    onWallpaperCircleDurationChanged: config.saveSettings()
+    onWallpaperCircleOriginChanged: config.saveSettings()
+    onWallpaperSwipeDurationChanged: config.saveSettings()
+    onWallpaperSwipeDirectionChanged: config.saveSettings()
+    onNightLightModeChanged: config.saveSettings()
+    onNightLightFromChanged: config.saveSettings()
+    onNightLightToChanged: config.saveSettings()
+    onAutoLockSecondsChanged: config.saveSettings()
+}

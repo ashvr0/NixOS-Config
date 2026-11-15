@@ -19,7 +19,7 @@ hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))
 hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("sh -c 'grim -g \"$(slurp)\" ~/Pictures/screenshot-$(date +%F-%H%M%S).png'"))
 
 -- Quickshell
-hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("quickshell -p ~/.config/quickshell/Lock.qml"))
+hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("qs -p ~/.config/quickshell/LockShell.qml"))
 hl.bind(mainMod .. " + grave", hl.dsp.exec_cmd("qs ipc call wallpaper toggle"))
 hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("qs ipc call network toggle"))
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("qs ipc call audio toggle"))

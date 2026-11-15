@@ -1,34 +1,32 @@
-singleton Config 1.0 Config.qml
-singleton Weather 1.0 Weather.qml
-singleton Scaler 1.0 Scaler.qml
 singleton Notifs 1.0 Notification/Notifs.qml
+singleton LockLayout 1.0 Lock/LockLayout.qml
 
-Bar 1.0 Bar.qml
 WallpaperPicker 1.0 Wallpaper/WallpaperPicker.qml
 Launcher 1.0 Launchers/Launcher.qml
 Clipboard 1.0 Launchers/Clipboard.qml
 Notification 1.0 Notification/Notification.qml
-Workspaces 1.0 Workspaces.qml
-MusicPlayer 1.0 MusicPlayer.qml
-SystemTray 1.0 SystemTray.qml
-Power 1.0 Power.qml
-Audio 1.0 Audio.qml
-Bluetooth 1.0 Bluetooth.qml
+Workspaces 1.0 Bar/Workspaces.qml
+MusicPlayer 1.0 Media/MusicPlayer.qml
+SystemTray 1.0 Bar/SystemTray.qml
+TraySystemMenu 1.0 Bar/TraySystemMenu.qml
+Power 1.0 Power/Power.qml
+Audio 1.0 Volume/Audio.qml
+Bluetooth 1.0 Network/Bluetooth.qml
 Calendar 1.0 Calendar/Calendar.qml
 CalendarBar 1.0 Calendar/CalendarBar.qml
-Keyboard 1.0 Keyboard.qml
-Network 1.0 Network.qml
-BarModulePill 1.0 BarModulePill.qml
-WeatherPopup 1.0 WeatherPopup.qml
+Keyboard 1.0 Bar/Keyboard.qml
+Network 1.0 Network/Network.qml
 Settings 1.0 Settings/Settings.qml
 GeneralTab 1.0 Settings/GeneralTab.qml
-BarTab 1.0 Settings/BarTab.qml
-AppearanceTab 1.0 Settings/AppearanceTab.qml
+BarTab 1.0 Settings/Bar/BarTab.qml
+BarModulesTab 1.0 Settings/Bar/BarModulesTab.qml
+AppearanceTab 1.0 Settings/Appearance/AppearanceTab.qml
+LockTab 1.0 Settings/Appearance/LockTab.qml
 KeybindsTab 1.0 Settings/KeybindsTab.qml
 DisplayTab 1.0 Settings/DisplayTab.qml
 AboutTab 1.0 Settings/AboutTab.qml
+LauncherTab 1.0 Settings/LauncherTab.qml
 NotifactionTab 1.0 Settings/NotifactionTab.qml
-TraySystemMenu 1.0 TraySystemMenu.qml
 DesktopWidgets 1.0 Widgets/DesktopWidgets.qml
 DesktopWidgetFrame 1.0 Widgets/DesktopWidgetFrame.qml
 DesktopClockWidget 1.0 Widgets/DesktopClockWidget.qml
@@ -36,4 +34,10 @@ DesktopMusicWidget 1.0 Widgets/DesktopMusicWidget.qml
 DesktopWeatherWidget 1.0 Widgets/DesktopWeatherWidget.qml
 DesktopCalendarWidget 1.0 Widgets/DesktopCalendarWidget.qml
 DesktopImageWidget 1.0 Widgets/DesktopImageWidget.qml
-FilePickerDialog 1.0 FilePickerDialog.qml
+WallpaperBackground 1.0 Wallpaper/WallpaperBackground.qml
+Lock 1.0 Lock/Lock.qml
+LockEditor 1.0 Lock/LockEditor.qml
+LockElementFace 1.0 Lock/LockElementFace.qml
+LockEditFrame 1.0 Lock/LockEditFrame.qml
+WallpaperTab 1.0 Settings/Appearance/WallpaperTab.qml
+TransitionTile 1.0 Settings/Appearance/TransitionTile.qml

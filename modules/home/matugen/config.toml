@@ -7,7 +7,7 @@ output_path = "~/.config/hypr/colors.lua"
 
 [templates.quickshell]
 input_path = "~/.config/matugen/templates/quickshell.colors.json.template"
-output_path = "~/.config/quickshell/colors.json"
+output_path = "~/.local/state/quickshell/colors.json"
 
 [templates.alacritty]
 input_path = "~/.config/matugen/templates/alacritty-colors.toml.template"
@@ -17,14 +17,14 @@ output_path = "~/.cache/matugen/colors.toml"
 input_path = "~/.config/matugen/templates/cava-colors.ini.template"
 output_path = "~/.config/cava/colors"
 
-[templates.rofi]
-input_path = '~/.config/matugen/templates/rofi-colors.rasi.template'
-output_path = '~/.config/rofi/colors.rasi'
-
 [templates.nvim]
 input_path = "~/.config/matugen/templates/nvim-colors.lua.template"
 output_path = "~/.config/nvim/matugen_colors.lua"
 
-[templates.gtk]
-input_path = "~/.config/matugen/templates/gtk.css.template"
-output_path = "~/.cache/matugen/colors-gtk.css"
+[templates.gtk3]
+input_path = '~/.config/matugen/templates/gtk.css.template'
+output_path = '~/.config/gtk-3.0/matugen.css'
+
+[templates.gtk4]
+input_path = '~/.config/matugen/templates/gtk.css.template'
+output_path = '~/.config/gtk-4.0/matugen.css'

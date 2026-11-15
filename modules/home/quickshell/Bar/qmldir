@@ -1,0 +1,6 @@
+Bar 1.0 Bar.qml
+TopBar 1.0 TopBar.qml
+SideBar 1.0 SideBar.qml
+BarModulePill 1.0 BarModulePill.qml
+SystemTray 1.0 SystemTray.qml
+TraySystemMenu 1.0 TraySystemMenu.qml

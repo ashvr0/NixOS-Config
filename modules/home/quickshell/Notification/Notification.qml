@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Services.Notifications
 import ".."
+import "../Singletons"
 
 PanelWindow {
     id: root
@@ -49,9 +50,7 @@ PanelWindow {
         width: 340
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.horizontalCenter: root.anchorHCenter ? parent.horizontalCenter : undefined
-        anchors.left: !root.anchorHCenter ? parent.left : undefined
-        anchors.right: !root.anchorHCenter ? parent.right : undefined
+        x: root.anchorHCenter ? Math.round((parent.width - width) / 2) : (root.anchorRight ? parent.width - width : 0)
         model: Notifs.popups
         spacing: 10
         interactive: false
@@ -62,10 +61,15 @@ PanelWindow {
             NumberAnimation { property: "x"; from: 60; to: 0; duration: 250; easing.type: Easing.OutQuint }
         }
         remove: Transition {
-            NumberAnimation { property: "opacity"; to: 0; duration: 200 }
+            NumberAnimation { property: "opacity"; to: 0; duration: 120 }
         }
         displaced: Transition {
-            NumberAnimation { properties: "y"; duration: 250; easing.type: Easing.OutQuint }
+            // Was 250ms — combined with the delegate's own y-Behavior this
+            // made the reflow after a swipe-dismiss feel like it took 1-2
+            // seconds. Only one of these should really be animating position
+            // at a time; keeping this one fast and letting it be the single
+            // source of truth for the reflow.
+            NumberAnimation { properties: "y"; duration: 120; easing.type: Easing.OutCubic }
         }
 
         delegate: Item {
@@ -74,9 +78,16 @@ PanelWindow {
             width: list.width
             height: (Math.max(iconTile.height, col.implicitHeight) + 24) + (canExpand ? expandProgress * expandedExtraHeight : 0)
 
+            // Only the height Behavior lives here now. A y-Behavior was
+            // added earlier alongside the ListView's own `displaced`
+            // transition below, but having both animate the same property
+            // means each removal could re-trigger/compound the other,
+            // which is what made the reflow feel like it took 1-2 seconds
+            // instead of being instant/snappy. `displaced` below is now the
+            // single source of truth for repositioning.
             Behavior on height {
                 enabled: !vDragArea.activeVerticalDrag
-                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
             }
 
             readonly property bool critical: modelData.urgency === NotificationUrgency.Critical

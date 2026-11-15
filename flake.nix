@@ -6,7 +6,6 @@
     spicetify-nix.url = "github:Gerg-L/spicetify-nix";
     nix-gaming.url = "github:fufexan/nix-gaming";
     zen-browser.url = "github:youwen5/zen-browser-flake";
-    serpantinum.url = "github:ilyamiro/serpantinum";
 
     home-manager = {
       url = "github:nix-community/home-manager";
@@ -36,6 +35,7 @@
 {
   home-manager.useGlobalPkgs = true;
   home-manager.useUserPackages = true;
+    home-manager.backupFileExtension = "bak";
 
   home-manager.extraSpecialArgs = {
     inherit inputs hostname username;

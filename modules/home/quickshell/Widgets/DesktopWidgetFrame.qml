@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import "../Components"
 import ".."
 import "../Singletons"
 
@@ -10,12 +11,9 @@ Item {
   property real boundsWidth: 1920
   property real boundsHeight: 1080
   property var desktopRoot: null
+  property bool resizing: false
   readonly property bool selected: Config.desktopSelectedWidgetId === widgetId
 
-  // Cache the id/type up front. These never change for a given widget
-  // instance, so reading them once avoids re-deriving anything from
-  // widgetData (a fresh object every update) inside bindings that
-  // shouldn't care about unrelated field changes.
   readonly property string widgetId: widgetData ? widgetData.id : ""
   readonly property string widgetType: widgetData ? widgetData.type : ""
   readonly property var defaults: Config.desktopWidgetTypes.find(t => t.type === frame.widgetType)
@@ -26,6 +24,9 @@ Item {
   height: widgetData ? widgetData.h : 140
 
   readonly property real widgetOpacity: (widgetData && widgetData.opacity !== undefined) ? widgetData.opacity : 1.0
+  readonly property int widgetRotation: (widgetData && widgetData.rotation !== undefined) ? widgetData.rotation : 0
+  // 90/270: frame box is the rotated (visual) box, content is laid out swapped.
+  readonly property bool sideways: widgetRotation % 180 !== 0
   readonly property string clockVariant: (widgetData && widgetData.variant !== undefined) ? widgetData.variant : "digital"
   readonly property string calendarVariant: (widgetData && widgetData.variant !== undefined) ? widgetData.variant : "month"
   readonly property string musicVariant: (widgetData && widgetData.variant !== undefined) ? widgetData.variant : "wide"
@@ -33,26 +34,36 @@ Item {
   readonly property string systemStatVariant: (widgetData && widgetData.variant !== undefined) ? widgetData.variant : "cpu"
   readonly property real gridSize: 20
 
-  Behavior on x { enabled: !dragMa.drag.active; NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-  Behavior on y { enabled: !dragMa.drag.active; NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+  // Size limits in frame (visual) space; swapped when sideways.
+  readonly property real minW: { let v = defaults ? (sideways ? defaults.minH : defaults.minW) : undefined; return v !== undefined ? v : (sideways ? 140 : 180) }
+  readonly property real minH: { let v = defaults ? (sideways ? defaults.minW : defaults.minH) : undefined; return v !== undefined ? v : (sideways ? 180 : 140) }
+  readonly property real maxW: { let v = defaults ? (sideways ? defaults.maxH : defaults.maxW) : undefined; return v !== undefined ? v : 1200 }
+  readonly property real maxH: { let v = defaults ? (sideways ? defaults.maxW : defaults.maxH) : undefined; return v !== undefined ? v : 1200 }
 
-  // Selected widget (panel open) must draw above every sibling frame,
-  // or a neighbour's opaque content sits over this widget's own panel.
-  // Panel content itself also carries z: 50, but that only wins within
-  // this frame - siblings still need their own root z raised.
+  Behavior on x { enabled: !dragMa.drag.active && !frame.resizing; NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+  Behavior on y { enabled: !dragMa.drag.active && !frame.resizing; NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
   z: frame.selected ? 100 : 0
+
+  // Rotate 90 deg: swap w/h around the center so the border follows.
+  function rotateStep() {
+    let next = (frame.widgetRotation + 90) % 360
+    let nw = Math.round(frame.height)
+    let nh = Math.round(frame.width)
+    let nx = Math.max(0, Math.round(frame.x + (frame.width - nw) / 2))
+    let ny = Math.max(0, Math.round(frame.y + (frame.height - nh) / 2))
+    Config.updateDesktopWidget(frame.widgetId, { rotation: next, w: nw, h: nh, x: nx, y: ny })
+  }
 
   Item {
     id: contentWrap
-    anchors.fill: parent
+    anchors.centerIn: parent
+    width: frame.sideways ? frame.height : frame.width
+    height: frame.sideways ? frame.width : frame.height
     opacity: frame.widgetOpacity
-    rotation: (widgetData && widgetData.rotation !== undefined) ? widgetData.rotation : 0
+    rotation: frame.widgetRotation
     Behavior on rotation { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
-    // sourceComponent is keyed only off widgetType, which is a readonly
-    // property that never changes after creation - so dragging, resizing,
-    // or changing opacity/variant never touches this Loader or reloads
-    // the widget's content.
     Loader {
       id: contentLoader
       anchors.fill: parent
@@ -78,8 +89,6 @@ Item {
       }
     }
 
-    // These only push updates into the already-loaded item's properties -
-    // they never touch sourceComponent, so no reload happens.
     Connections {
       target: frame
       function onClockVariantChanged() {
@@ -113,7 +122,6 @@ Item {
   Component { id: systemStatComp; DesktopSystemStatWidget {} }
   Component { id: cavaComp; DesktopCavaWidget {} }
 
-  // Click to select while in edit mode (opens the control panel below).
   MouseArea {
     anchors.fill: parent
     visible: Config.desktopEditMode
@@ -122,9 +130,9 @@ Item {
     onClicked: Config.desktopSelectedWidgetId = frame.selected ? "" : frame.widgetId
   }
 
-  // Edit chrome: move handle, resize handle, remove button. Only
-  // interactive while Config.desktopEditMode is on.
+  // Edit chrome: border + move + 8 resize handles (corners and sides).
   Rectangle {
+    id: chrome
     anchors.fill: parent
     anchors.margins: -4
     radius: 10
@@ -144,10 +152,6 @@ Item {
       cursorShape: Qt.SizeAllCursor
       onClicked: Config.desktopSelectedWidgetId = frame.selected ? "" : frame.widgetId
 
-      // Snap live while dragging. Only one write per move now (raw
-      // position gets immediately overwritten with the rounded value
-      // in this same handler), instead of drag.target writing raw
-      // then this correcting after, which was causing jitter.
       onPositionChanged: {
         if (!drag.active) return
         if (Config.desktopSnapToGrid) {
@@ -180,102 +184,81 @@ Item {
       }
     }
 
-    Rectangle {
-      id: resizeHandle
-      width: 22; height: 22; radius: 7
-      anchors.right: parent.right
-      anchors.bottom: parent.bottom
-      anchors.margins: -2
-      color: MatugenColors.accent
+    // ax/ay: -1 = left/top edge, 0 = middle, 1 = right/bottom edge.
+    Repeater {
+      model: [
+        { ax: -1, ay: -1 }, { ax: 0, ay: -1 }, { ax: 1, ay: -1 },
+        { ax: -1, ay: 0 },                      { ax: 1, ay: 0 },
+        { ax: -1, ay: 1 },  { ax: 0, ay: 1 },  { ax: 1, ay: 1 }
+      ]
+      delegate: MouseArea {
+        id: handle
+        required property var modelData
+        readonly property int ax: modelData.ax
+        readonly property int ay: modelData.ay
+        readonly property real hs: 14
 
-      property real startW: 0
-      property real startH: 0
-
-      // Falls back to the old flat bounds if a widget type has no
-      // min/max defined, so this never breaks for an unlisted type.
-      readonly property real minW: frame.defaults && frame.defaults.minW !== undefined ? frame.defaults.minW : 180
-      readonly property real minH: frame.defaults && frame.defaults.minH !== undefined ? frame.defaults.minH : 140
-      readonly property real maxW: frame.defaults && frame.defaults.maxW !== undefined ? frame.defaults.maxW : 1200
-      readonly property real maxH: frame.defaults && frame.defaults.maxH !== undefined ? frame.defaults.maxH : 1200
-
-      MouseArea {
-        anchors.fill: parent
-        cursorShape: Qt.SizeFDiagCursor
-        onPressed: {
-          resizeHandle.startW = frame.width
-          resizeHandle.startH = frame.height
+        width: ax === 0 ? chrome.width - hs : hs
+        height: ay === 0 ? chrome.height - hs : hs
+        x: ax === -1 ? -hs / 2 : (ax === 0 ? hs / 2 : chrome.width - hs / 2)
+        y: ay === -1 ? -hs / 2 : (ay === 0 ? hs / 2 : chrome.height - hs / 2)
+        z: 10
+        cursorShape: {
+          if (ax === 0) return Qt.SizeVerCursor
+          if (ay === 0) return Qt.SizeHorCursor
+          return (ax === ay) ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
         }
+
+        property real sx: 0
+        property real sy: 0
+        property real sw: 0
+        property real sh: 0
+        property real mx0: 0
+        property real my0: 0
+
+        onPressed: (mouse) => {
+          frame.resizing = true
+          sx = frame.x; sy = frame.y; sw = frame.width; sh = frame.height
+          let p = handle.mapToItem(frame.parent, mouse.x, mouse.y)
+          mx0 = p.x; my0 = p.y
+        }
+
         onPositionChanged: (mouse) => {
           if (!pressed) return
-          frame.width = Math.min(resizeHandle.maxW, Math.max(resizeHandle.minW, resizeHandle.startW + mouse.x))
-          frame.height = Math.min(resizeHandle.maxH, Math.max(resizeHandle.minH, resizeHandle.startH + mouse.y))
+          let p = handle.mapToItem(frame.parent, mouse.x, mouse.y)
+          let dx = p.x - mx0
+          let dy = p.y - my0
+          let nx = sx, ny = sy, nw = sw, nh = sh
+
+          if (ax === 1) nw = Math.min(frame.maxW, Math.max(frame.minW, sw + dx))
+          else if (ax === -1) { nw = Math.min(frame.maxW, Math.max(frame.minW, sw - dx)); nx = sx + sw - nw }
+
+          if (ay === 1) nh = Math.min(frame.maxH, Math.max(frame.minH, sh + dy))
+          else if (ay === -1) { nh = Math.min(frame.maxH, Math.max(frame.minH, sh - dy)); ny = sy + sh - nh }
+
+          frame.x = nx; frame.y = ny
+          frame.width = nw; frame.height = nh
         }
+
         onReleased: {
-          let gw = Config.desktopSnapToGrid ? Math.round(frame.width / frame.gridSize) * frame.gridSize : frame.width
-          let gh = Config.desktopSnapToGrid ? Math.round(frame.height / frame.gridSize) * frame.gridSize : frame.height
-          frame.width = Math.min(resizeHandle.maxW, Math.max(resizeHandle.minW, gw))
-          frame.height = Math.min(resizeHandle.maxH, Math.max(resizeHandle.minH, gh))
-          Config.updateDesktopWidget(frame.widgetId, { w: Math.round(frame.width), h: Math.round(frame.height) })
+          let g = Config.desktopSnapToGrid
+          let gs = frame.gridSize
+          let fx = g ? Math.round(frame.x / gs) * gs : frame.x
+          let fy = g ? Math.round(frame.y / gs) * gs : frame.y
+          let fw = g ? Math.round(frame.width / gs) * gs : frame.width
+          let fh = g ? Math.round(frame.height / gs) * gs : frame.height
+          fw = Math.min(frame.maxW, Math.max(frame.minW, fw))
+          fh = Math.min(frame.maxH, Math.max(frame.minH, fh))
+          frame.resizing = false
+          Config.updateDesktopWidget(frame.widgetId, {
+            x: Math.round(fx), y: Math.round(fy), w: Math.round(fw), h: Math.round(fh)
+          })
         }
       }
     }
-
-    Rectangle {
-      width: 22; height: 22; radius: 11
-      anchors.right: parent.right
-      anchors.top: parent.top
-      anchors.margins: -8
-      color: "#e05555"
-
-      Text {
-        anchors.centerIn: parent
-        text: "\u2715"
-        color: "white"
-        font.pixelSize: 10
-      }
-
-      MouseArea {
-        anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
-        onClicked: Config.removeDesktopWidget(frame.widgetId)
-      }
-    }
-
-    Rectangle {
-      id: rotateHandle
-      width: 22; height: 22; radius: 11
-      anchors.left: parent.left
-      anchors.top: parent.top
-      anchors.margins: -8
-      color: rotateMa.containsMouse ? Qt.lighter(MatugenColors.accent, 1.1) : MatugenColors.accent
-
-      readonly property int currentRotation: (frame.widgetData && frame.widgetData.rotation !== undefined) ? frame.widgetData.rotation : 0
-
-      Text {
-        anchors.centerIn: parent
-        text: "\uf2f1"
-        color: MatugenColors.accentText
-        font.pixelSize: 11
-        font.family: "JetBrainsMono Nerd Font"
-      }
-
-      MouseArea {
-        id: rotateMa
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        // Rotates in fixed 90° steps, wrapping back to 0 after 270°, so
-        // repeated clicks cycle cleanly instead of accumulating forever.
-        onClicked: {
-          let next = (rotateHandle.currentRotation + 90) % 360
-          Config.updateDesktopWidget(frame.widgetId, { rotation: next })
-        }
-      }
-    }
-
   }
 
-  // ── Control panel: appears below the widget, always visible in edit mode ──
+  // ── Control panel ──
   Rectangle {
     id: controlPanel
     visible: opacity > 0
@@ -292,7 +275,7 @@ Item {
     border.width: 0
     z: 50
 
-    MouseArea { anchors.fill: parent } // eat clicks, don't drag the widget
+    MouseArea { anchors.fill: parent }
 
     Column {
       id: panelCol
@@ -329,11 +312,9 @@ Item {
             MouseArea {
               anchors.fill: parent
               cursorShape: Qt.PointingHandCursor
-              // Digital and analog are different natural shapes (wide vs.
-              // roughly square), so switching variant also resizes the
-              // widget instead of leaving the old layout's box behind.
               onClicked: Config.updateDesktopWidget(frame.widgetId, {
                 variant: modelData.size,
+                rotation: 0,
                 w: modelData.w,
                 h: modelData.h
               })
@@ -369,11 +350,9 @@ Item {
             MouseArea {
               anchors.fill: parent
               cursorShape: Qt.PointingHandCursor
-              // Each variant is its own layout with its own natural size,
-              // same as weather's size presets - so switching variant also
-              // resizes the widget instead of leaving stale content cramped.
               onClicked: Config.updateDesktopWidget(frame.widgetId, {
                 variant: modelData.variant,
+                rotation: 0,
                 w: modelData.w,
                 h: modelData.h
               })
@@ -409,10 +388,9 @@ Item {
             MouseArea {
               anchors.fill: parent
               cursorShape: Qt.PointingHandCursor
-              // Large is a tall layout, wide is a short strip - each needs
-              // its own natural size, so switching variant resizes too.
               onClicked: Config.updateDesktopWidget(frame.widgetId, {
                 variant: modelData.variant,
+                rotation: 0,
                 w: modelData.w,
                 h: modelData.h
               })
@@ -481,12 +459,9 @@ Item {
             MouseArea {
               anchors.fill: parent
               cursorShape: Qt.PointingHandCursor
-              // Each size has its own natural layout (icon-only vs. hourly
-              // strip vs. full week), so switching size also resizes the
-              // widget to that preset's dimensions rather than leaving
-              // stale content cramped into the old box.
               onClicked: Config.updateDesktopWidget(frame.widgetId, {
                 size: modelData.size,
+                rotation: 0,
                 w: modelData.w,
                 h: modelData.h
               })
@@ -494,6 +469,7 @@ Item {
           }
         }
       }
+
       // Choose image button (image widget only)
       Rectangle {
         visible: frame.widgetType === "image"
@@ -584,7 +560,7 @@ Item {
         }
       }
 
-      // Size readout + reset
+      // Size readout + reset + rotate + remove
       Row {
         spacing: 8
         anchors.horizontalCenter: parent.horizontalCenter
@@ -607,6 +583,7 @@ Item {
           }
         }
 
+        // Reset
         Rectangle {
           width: 22; height: 22; radius: 6
           anchors.verticalCenter: parent.verticalCenter
@@ -659,6 +636,51 @@ Item {
             }
           }
         }
+
+        // Rotate
+        Rectangle {
+          width: 22; height: 22; radius: 6
+          anchors.verticalCenter: parent.verticalCenter
+          color: rotateMa.containsMouse ? MatugenColors.accentSoft : MatugenColors.bgElevated2
+
+          Text {
+            anchors.centerIn: parent
+            text: "\uf2f1"
+            font.pixelSize: 11
+            font.family: "JetBrainsMono Nerd Font"
+            color: rotateMa.containsMouse ? MatugenColors.accent : MatugenColors.text
+          }
+
+          MouseArea {
+            id: rotateMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: frame.rotateStep()
+          }
+        }
+
+        // Remove
+        Rectangle {
+          width: 22; height: 22; radius: 6
+          anchors.verticalCenter: parent.verticalCenter
+          color: removeMa.containsMouse ? "#e05555" : MatugenColors.bgElevated2
+
+          Text {
+            anchors.centerIn: parent
+            text: "\u2715"
+            font.pixelSize: 10
+            color: removeMa.containsMouse ? "white" : "#e05555"
+          }
+
+          MouseArea {
+            id: removeMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: Config.removeDesktopWidget(frame.widgetId)
+          }
+        }
       }
     }
   }
@@ -666,14 +688,10 @@ Item {
   Loader {
     id: imagePickerLoader
     active: false
-    // Reparent to the top-level window's content item so the dialog
-    // fills the whole screen instead of being clipped/squashed to
-    // this widget's own small frame bounds (frame is the picker's
-    // natural parent, which is wrong here).
     parent: frame.Window.window ? frame.Window.window.contentItem : frame
     anchors.fill: parent
     z: 1000
-        sourceComponent: FilePickerDialog {
+    sourceComponent: FilePickerDialog {
       titleText: "Choose image"
       nameFilters: ["png", "jpg", "jpeg", "webp", "bmp", "gif"]
       places: [

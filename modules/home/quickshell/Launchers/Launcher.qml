@@ -1,10 +1,12 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import ".."
 import "../Singletons"
+import "../Singletons/SearchProviders.js" as SearchProviders
 
 PanelWindow {
   id: root
@@ -20,7 +22,8 @@ PanelWindow {
   color: "transparent"
   WlrLayershell.layer: WlrLayer.Overlay
   WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-  exclusiveZone: 0
+  // Ignore other panels' reserved space (your bar) so the launcher can sit on the real screen edge.
+  exclusionMode: ExclusionMode.Ignore
 
   anchors { top: true; left: true; right: true; bottom: true }
 
@@ -68,26 +71,42 @@ PanelWindow {
         }))
         .filter(e => e.exec.length > 0)
       entries.sort((a, b) => {
-        const rb = root.rankData[b.name] || 0
-        const ra = root.rankData[a.name] || 0
-        if (rb !== ra) return rb - ra
+        if (Config.launcherSmartSort) {
+          const rb = root.rankData[b.name] || 0
+          const ra = root.rankData[a.name] || 0
+          if (rb !== ra) return rb - ra
+        }
         return a.name.localeCompare(b.name)
       })
       return entries
     }
   }
 
-  ScriptModel {
-    id: filteredModel
-    values: {
-      const q = query.text.toLowerCase().trim()
-      const apps = appsModel.values
-      return q === "" ? apps : apps.filter(a =>
-        a.name.toLowerCase().includes(q) ||
-        (a.keywords && a.keywords.toLowerCase().includes(q))
-      )
+ScriptModel {
+  id: filteredModel
+  values: {
+    const raw = query.text.trim()
+    if (raw.startsWith("?")) {
+      const term = raw.substring(1).trim()
+      const provider = SearchProviders.find(Config.launcherSearchProvider)
+      return [{
+        name: term.length > 0 ? "? " + term : "? ...",
+        description: term.length > 0 ? "Search " + provider.name : "Type something to search " + provider.name,
+        icon: "",
+        keywords: "",
+        isWeb: true,
+        url: term.length > 0 ? SearchProviders.urlFor(Config.launcherSearchProvider, term) : ""
+      }]
     }
+
+    const q = query.text.toLowerCase().trim()
+    const apps = appsModel.values
+    return q === "" ? apps : apps.filter(a =>
+      a.name.toLowerCase().includes(q) ||
+      (a.keywords && a.keywords.toLowerCase().includes(q))
+    )
   }
+}
 
   function toggle() {
     if (root.visible) close()
@@ -106,11 +125,18 @@ PanelWindow {
   }
 
   function launch(app) {
-    if (!app) return
-    root.bumpRank(app.name)
-    app.entry.execute()
-    close()
+  if (!app) return
+  if (app.isWeb) {
+    if (app.url) {
+      Quickshell.execDetached(["xdg-open", app.url])
+      close()
+    }
+    return
   }
+  root.bumpRank(app.name)
+  app.entry.execute()
+  close()
+}
 
   MouseArea {
     anchors.fill: parent
@@ -118,19 +144,89 @@ PanelWindow {
   }
 
   // Popup
-  Rectangle {
+  readonly property string edge: Config.launcherPosition
+  readonly property int shownRows: Math.min(resultsList.count, Config.launcherVisibleItems)
+  readonly property real listHeight: shownRows * 58 + Math.max(shownRows - 1, 0) * 5
+
+  Item {
     id: panel
-    width: 1000
-    height: query.text.length || resultsList.count ? Math.min(24 + 64 + (resultsList.count * 58) + (Math.max(resultsList.count - 1, 0) * 6), 24 + 64 + (7 * 58) + (6 * 6)) : 24 + 64
-    anchors.centerIn: parent
-    radius: 10
-    color: MatugenColors.bgBase
+    // Frame that hugs the screen edge: rounded free corners, flared
+    // (concave) corners where it meets the edge. "center" = rounded card.
+    property string edge: root.edge
+    property real radius: Config.uiRadius + 8
+    property color color: MatugenColors.bgBase
+    property real padding: 12
+
+    readonly property bool alongX: edge === "top" || edge === "bottom"
+    readonly property bool alongY: edge === "left" || edge === "right"
+    readonly property bool docked: alongX || alongY
+    readonly property real verticalInset: padding * 2 + (alongY ? radius * 2 : 0)
+
+    function pt(D, L) {
+      let x, y
+      if (edge === "left")       { x = D;         y = L }
+      else if (edge === "right") { x = width - D; y = L }
+      else if (edge === "top")   { x = L;         y = D }
+      else                       { x = L;         y = height - D }
+      return x + " " + y
+    }
+
+    readonly property string shapePath: {
+      let r = Math.max(0, Math.min(radius, Math.min(width, height) / 4))
+      if (!docked) {
+        let rr = Math.min(radius, Math.min(width, height) / 2)
+        return "M " + rr + " 0 L " + (width - rr) + " 0 A " + rr + " " + rr + " 0 0 1 " + width + " " + rr
+          + " L " + width + " " + (height - rr) + " A " + rr + " " + rr + " 0 0 1 " + (width - rr) + " " + height
+          + " L " + rr + " " + height + " A " + rr + " " + rr + " 0 0 1 0 " + (height - rr)
+          + " L 0 " + rr + " A " + rr + " " + rr + " 0 0 1 " + rr + " 0 Z"
+      }
+      let Dt = alongY ? width : height
+      let Lt = alongY ? height : width
+      let flip = (edge === "right" || edge === "top")
+      let concave = flip ? 1 : 0
+      let convex = flip ? 0 : 1
+      let a = function (sweep) { return "A " + r + " " + r + " 0 0 " + sweep + " " }
+      return "M " + pt(0, 0)
+        + " " + a(concave) + pt(r, r)
+        + " L " + pt(Dt - r, r)
+        + " " + a(convex) + pt(Dt, 2 * r)
+        + " L " + pt(Dt, Lt - 2 * r)
+        + " " + a(convex) + pt(Dt - r, Lt - r)
+        + " L " + pt(r, Lt - r)
+        + " " + a(concave) + pt(0, Lt)
+        + " Z"
+    }
+
+    Shape {
+      anchors.fill: parent
+      preferredRendererType: Shape.CurveRenderer
+      ShapePath {
+        strokeWidth: 0
+        fillColor: panel.color
+        PathSvg { path: panel.shapePath }
+      }
+    }
+
+    Item {
+      id: contentArea
+      anchors.fill: parent
+      anchors.leftMargin: panel.padding + (panel.alongX ? panel.radius : 0)
+      anchors.rightMargin: panel.padding + (panel.alongX ? panel.radius : 0)
+      anchors.topMargin: panel.padding + (panel.alongY ? panel.radius : 0)
+      anchors.bottomMargin: panel.padding + (panel.alongY ? panel.radius : 0)
+    }
+
+    width: Config.launcherWidth
+    height: 44 + (root.shownRows > 0 ? 12 + root.listHeight : 0) + panel.verticalInset
     visible: root.visible
+
+    // Fixed size, flush to the chosen edge, centered along it.
     clip: true
+    x: edge === "left" ? 0 : (edge === "right" ? root.width - width : Math.round((root.width - width) / 2))
+    y: edge === "top" ? 0 : (edge === "bottom" ? root.height - height : Math.round((root.height - height) / 2))
 
     ColumnLayout {
-      anchors.fill: parent
-      anchors.margins: 12
+      anchors.fill: contentArea
       spacing: 12
 
       RowLayout {
@@ -231,11 +327,24 @@ PanelWindow {
             spacing: 12
 
             Image {
-              source: Quickshell.iconPath(modelData.icon, true)
+              visible: !modelData.isWeb
+              source: modelData.isWeb ? "" : Quickshell.iconPath(modelData.icon, true)
               Layout.preferredWidth: 40
               Layout.preferredHeight: 40
               fillMode: Image.PreserveAspectFit
               asynchronous: true
+            }
+
+            Text {
+              visible: modelData.isWeb === true
+              text: "󰖟"
+              Layout.preferredWidth: 40
+              Layout.preferredHeight: 40
+              horizontalAlignment: Text.AlignHCenter
+              verticalAlignment: Text.AlignVCenter
+              font.family: "JetBrains Mono Nerd Font"
+              font.pixelSize: 24
+              color: index === root.selectedIndex ? MatugenColors.accentText : MatugenColors.accent
             }
 
             ColumnLayout {

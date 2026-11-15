@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Services.Notifications
+import "../Singletons"
 
 Item {
     id: notifs
@@ -46,6 +47,7 @@ Item {
             if (!notifs.silent) {
                 notifs.popups = notifs.popups.concat([entry])
                 popupExpire(entry)
+                if (Config.notifSound) Sounds.play(Config.notifSoundFile)
             }
         }
     }
@@ -68,7 +70,21 @@ Item {
     }
 
     function removePopup(entry) {
-        notifs.popups = notifs.popups.filter(e => e !== entry)
+        // .filter() previously built a brand-new array from scratch on every
+        // removal. Some Quickshell/Qt versions don't diff two structurally
+        // similar-but-distinct arrays cleanly for ListView's add/remove/
+        // displaced transitions when bound as a plain `property var` model —
+        // it can fall back to a full reset, which is why a dismissed popup's
+        // neighbor didn't visibly slide up: the whole list just silently
+        // redrew in its new state instead of animating the reflow.
+        // Finding the index and removing in place, then reassigning, keeps
+        // the same underlying identity semantics but is the pattern
+        // Quickshell's own examples use for reliable incremental updates.
+        const idx = notifs.popups.indexOf(entry)
+        if (idx === -1) return
+        let copy = notifs.popups.slice()
+        copy.splice(idx, 1)
+        notifs.popups = copy
     }
 
     function markAsRead(uid) {
@@ -119,6 +135,7 @@ Item {
         if (!notifs.silent) {
             notifs.popups = notifs.popups.concat([entry])
             popupExpire(entry)
+            if (Config.notifSound) Sounds.play(Config.notifSoundFile)
         }
     }
 

@@ -1,57 +1,19 @@
-import "../Singletons"
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import ".."
+import "../Singletons"
+import "../Singletons/PopupPlace.js" as Place
+import "../Components"
 
 Item {
   id: root
 
-component TextField : Rectangle {
+
+
+component AlertField : Dropdown {
   id: field
-  radius: 8
-  color: MatugenColors.bgElevated
-  border.width: focus ? 1 : 0
-  border.color: MatugenColors.accent
-
-  property string text: ""
-  property string placeholderText: ""
-
-  TextInput {
-    id: input
-    anchors.fill: parent
-    anchors.margins: s(8)
-    verticalAlignment: TextInput.AlignVCenter
-    font.pixelSize: s(11)
-    font.family: "JetBrainsMono Nerd Font"
-    color: MatugenColors.text
-    clip: true
-    text: field.text
-
-    Text {
-      anchors.fill: parent
-      verticalAlignment: Text.AlignVCenter
-      text: field.placeholderText
-      color: MatugenColors.textMuted
-      font.pixelSize: s(11)
-      font.family: "JetBrainsMono Nerd Font"
-      visible: field.text.length === 0
-    }
-
-    onTextEdited: field.text = text
-  }
-
-  MouseArea {
-    anchors.fill: parent
-    cursorShape: Qt.IBeamCursor
-    onClicked: input.forceActiveFocus()
-  }
-}
-
-component AlertField : Item {
-  id: root
 
   property string label: ""
   property bool allDay: false
@@ -60,7 +22,6 @@ component AlertField : Item {
 
   signal reminderEdited(var reminder)
 
-  readonly property bool active: reminder !== null
   readonly property var allOptions: allDay ? [
     { key: "none",   text: "None",              amount: 0,  unit: "days" },
     { key: "atstart", text: "At start of day",  amount: 0,  unit: "days" },
@@ -82,211 +43,43 @@ component AlertField : Item {
 
   function keyFor(o) { return o.unit + ":" + o.amount }
 
-  readonly property string myKey: root.active ? keyFor(root.reminder) : ""
+  readonly property string myKey: field.reminder !== null ? keyFor(field.reminder) : ""
 
-  readonly property var options: {
+  readonly property var choices: {
     var out = []
     for (var i = 0; i < allOptions.length; i++) {
       var o = allOptions[i]
       if (o.key === "none") { out.push(o); continue }
       var k = keyFor(o)
-      if (k === root.myKey || root.usedKeys.indexOf(k) === -1) out.push(o)
+      if (k === field.myKey || field.usedKeys.indexOf(k) === -1) out.push(o)
     }
     return out
   }
 
   function matchIndex() {
-    if (!root.active) return 0
-    for (var i = 0; i < options.length; i++) {
-      var o = options[i]
+    if (field.reminder === null) return 0
+    for (var i = 0; i < choices.length; i++) {
+      var o = choices[i]
       if (o.key === "none") continue
-      if (o.amount === root.reminder.amount && o.unit === root.reminder.unit) return i
+      if (o.amount === field.reminder.amount && o.unit === field.reminder.unit) return i
     }
     return 0
   }
 
-  readonly property string currentText: {
-    if (!root.active) return "None"
-    var idx = matchIndex()
-    return options[idx].text
-  }
+  s: function(v) { return Scaler.s(v) }
+  boxHeight: 34
+  options: choices
+  labelKey: "text"
+  currentIndex: matchIndex()
+  text: label + " " + choices[matchIndex()].text
 
-  width: parent ? parent.width : 200
-  height: 34
-  z: expanded ? 1000 : 1
-  clip: false
-
-  property bool expanded: false
-
-  Rectangle {
-    id: fieldBg
-    width: parent.width
-    height: 34
-    radius: 8
-    color: MatugenColors.bgElevated
-    border.width: root.expanded ? 1 : 0
-    border.color: MatugenColors.accent
-
-    Row {
-      anchors.left: parent.left
-      anchors.right: caret.left
-      anchors.leftMargin: 10
-      anchors.rightMargin: 6
-      anchors.verticalCenter: parent.verticalCenter
-      spacing: 6
-
-      Text {
-        text: root.label
-        color: MatugenColors.textMuted
-        font.pixelSize: s(10)
-        font.family: "JetBrainsMono Nerd Font"
-      }
-
-      Text {
-        text: root.currentText
-        color: MatugenColors.text
-        font.pixelSize: s(11)
-        font.family: "JetBrainsMono Nerd Font"
-        elide: Text.ElideRight
-      }
-    }
-
-    Text {
-      id: caret
-      anchors.right: parent.right
-      anchors.rightMargin: 10
-      anchors.verticalCenter: parent.verticalCenter
-      text: root.expanded ? "▲" : "▼"
-      color: MatugenColors.textMuted
-      font.pixelSize: s(8)
-      font.family: "JetBrainsMono Nerd Font"
-    }
-
-    MouseArea {
-      anchors.fill: parent
-      cursorShape: Qt.PointingHandCursor
-      onClicked: {
-        root.expanded = !root.expanded
-      }
-    }
-  }
-
-  MouseArea {
-    id: scrim
-    parent: calPopup.contentItem
-    anchors.fill: parent
-    visible: root.expanded
-    z: 999
-    onClicked: { root.expanded = false }
-  }
-
-  Rectangle {
-    id: dropdown
-    parent: calPopup.contentItem
-    x: { var p = root.mapToItem(calPopup.contentItem, 0, 34 + 4); return root.x, root.y, p.x }
-    y: { var p = root.mapToItem(calPopup.contentItem, 0, 34 + 4); return root.x, root.y, p.y }
-    width: root.width
-    height: optCol.implicitHeight + 8
-    radius: 8
-    color: MatugenColors.bgElevated2
-    border.width: 1
-    border.color: MatugenColors.borderSoft
-    visible: root.expanded
-    z: 1000
-    clip: true
-
-    Column {
-      id: optCol
-      width: parent.width
-      anchors.margins: 4
-      anchors.fill: parent
-      spacing: 1
-
-      Repeater {
-        model: root.options
-        Rectangle {
-          required property var modelData
-          required property int index
-          width: parent.width
-          height: 26
-          radius: 5
-          color: optHover.containsMouse ? MatugenColors.bgElevated : "transparent"
-
-          Text {
-            anchors.left: parent.left
-            anchors.leftMargin: s(8)
-            anchors.verticalCenter: parent.verticalCenter
-            text: modelData.text
-            color: MatugenColors.text
-            font.pixelSize: s(10)
-            font.family: "JetBrainsMono Nerd Font"
-          }
-
-          MouseArea {
-            id: optHover
-            anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-            onClicked: {
-              if (modelData.key === "none") {
-                root.reminderEdited(null)
-              } else {
-                root.reminderEdited({ amount: modelData.amount, unit: modelData.unit })
-              }
-              root.expanded = false
-            }
-          }
-        }
-      }
-    }
+  onPicked: function(index, value) {
+    if (value.key === "none") field.reminderEdited(null)
+    else field.reminderEdited({ amount: value.amount, unit: value.unit })
   }
 }
 
-component Slider2 : Item {
-  id: slider
-  property real value: 0
-  property real minVal: 0
-  property real maxVal: 255
-  signal moved(real v)
 
-  height: s(14)
-
-  Rectangle {
-    id: track
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.verticalCenter: parent.verticalCenter
-    height: s(4); radius: s(2)
-    color: MatugenColors.bgElevated
-  }
-
-  Rectangle {
-    width: Math.max(s(4), track.width * (slider.value - slider.minVal) / (slider.maxVal - slider.minVal))
-    height: s(4); radius: s(2)
-    anchors.verticalCenter: parent.verticalCenter
-    anchors.left: parent.left
-    color: MatugenColors.accent
-  }
-
-  Rectangle {
-    width: s(12); height: s(12); radius: s(6)
-    anchors.verticalCenter: parent.verticalCenter
-    x: Math.max(0, Math.min(track.width - width, track.width * (slider.value - slider.minVal) / (slider.maxVal - slider.minVal) - width / 2))
-    color: MatugenColors.text
-  }
-
-  MouseArea {
-    anchors.fill: parent
-    onPositionChanged: function(mouse) {
-      if (pressed) {
-        var frac = Math.max(0, Math.min(1, mouse.x / width))
-        slider.moved(slider.minVal + frac * (slider.maxVal - slider.minVal))
-      }
-    }
-    onPressed: function(mouse) {
-      var frac = Math.max(0, Math.min(1, mouse.x / width))
-      slider.moved(slider.minVal + frac * (slider.maxVal - slider.minVal))
-    }
-  }
-}
 
 component SegmentInput : Rectangle {
   id: seg
@@ -568,6 +361,26 @@ IpcHandler {
   }
   function s(val) { return Scaler.s(val) }
 
+  readonly property var travelOptions: [
+    { text: "None",          value: 0 },
+    { text: "5 minutes",     value: 5 },
+    { text: "15 minutes",    value: 15 },
+    { text: "30 minutes",    value: 30 },
+    { text: "1 hour",        value: 60 },
+    { text: "1 hour 30 min", value: 90 },
+    { text: "2 hours",       value: 120 }
+  ]
+  function travelIndex(min) {
+    for (var i = 0; i < travelOptions.length; i++) if (travelOptions[i].value === min) return i
+    return -1
+  }
+  property real anchorY: Screen.height / 2
+  function updateAnchor() {
+    var ref = (root.width > 0 && root.height > 0) ? root : root.parent
+    if (!ref) return
+    var p = ref.mapToItem(null, ref.width / 2, ref.height / 2)
+    root.anchorY = p.y + (Config.barVertical ? s(10) : 0)
+  }
   property int cascadeIndex: 3
   property bool entered: false
   Timer { interval: 200 + root.cascadeIndex * 80; running: true; onTriggered: root.entered = true }
@@ -761,6 +574,8 @@ IpcHandler {
 
     Text {
       text: {
+        var custom = (Config.clockFormat || "").trim()
+        if (custom.length > 0) return Qt.formatDateTime(clock.date, custom)
         var fmt = Config.clock24h ? "hh:mm" : "h:mm AP"
         if (Config.showClockSeconds) fmt = Config.clock24h ? "hh:mm:ss" : "h:mm:ss AP"
         return Qt.formatDateTime(clock.date, fmt)
@@ -773,6 +588,7 @@ IpcHandler {
     }
 
     Text {
+      visible: Config.showClockDate
       text: Qt.formatDateTime(clock.date, "ddd MMM d")
       color: calPopup.calendarOpen ? MatugenColors.accent : MatugenColors.textMuted
       font.pixelSize: s(10)
@@ -814,12 +630,14 @@ IpcHandler {
       anchors.horizontalCenter: parent.horizontalCenter
     }
     Rectangle {
+      visible: Config.showClockDate
       width: s(14); height: 1
       color: MatugenColors.textMuted
       opacity: 0.4
       anchors.horizontalCenter: parent.horizontalCenter
     }
     Text {
+      visible: Config.showClockDate
       text: Qt.formatDateTime(clock.date, "d")
       color: calPopup.calendarOpen ? MatugenColors.accent : MatugenColors.textMuted
       font.pixelSize: s(11)
@@ -828,6 +646,7 @@ IpcHandler {
       Behavior on color { ColorAnimation { duration: 200 } }
     }
     Text {
+      visible: Config.showClockDate
       text: Qt.formatDateTime(clock.date, "MMM")
       color: calPopup.calendarOpen ? MatugenColors.accent : MatugenColors.textMuted
       font.pixelSize: s(10)
@@ -870,6 +689,7 @@ IpcHandler {
 
     onCalendarOpenChanged: {
       if (calendarOpen) {
+        root.updateAnchor()
         calGrid.viewMonth = clockDate.getMonth()
         calGrid.viewYear  = clockDate.getFullYear()
         dayPanel.selectedDate = calGrid._keyFor(clockDate.getFullYear(), clockDate.getMonth(), clockDate.getDate())
@@ -930,8 +750,8 @@ IpcHandler {
       Rectangle {
         id: calCard
         width: s(720)
-        x: Config.barPosition === "left" ? s(80) : (Config.barPosition === "right" ? (Screen.width - width - s(80)) : (Screen.width - width - s(8)))
-        y: Config.barPosition === "bottom" ? (Screen.height - height - s(70)) : s(70)
+        x: Place.place(Config.barPosition, width, height, root.anchorY, Screen.width, Screen.height, root.s).x
+        y: Place.place(Config.barPosition, width, height, root.anchorY, Screen.width, Screen.height, root.s).y
         radius: s(10)
         clip: true
         focus: true
@@ -990,105 +810,72 @@ IpcHandler {
             Row {
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              spacing: 4
+              spacing: s(4)
 
-              Rectangle {
-                width: s(26); height: s(26); radius: s(6)
-                color: prevMonthArea.containsMouse ? MatugenColors.bgElevated : "transparent"
-                Behavior on color { ColorAnimation { duration: 150 } }
-                Text {
-                  anchors.centerIn: parent
-                  text: "‹"
-                  color: MatugenColors.accent; font.pixelSize: s(16); font.family: "JetBrainsMono Nerd Font"
-                }
-                MouseArea {
-                  id: prevMonthArea
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: {
-                    if (calSide.zoomLevel === "years") {
-                      yearsGrid.startYear = Math.max(calSide.minYear, yearsGrid.startYear - 12)
-                    } else if (calSide.zoomLevel === "months") {
-                      calGrid.viewYear = Math.max(calSide.minYear, calGrid.viewYear - 1)
-                    } else {
-                      calGrid.viewMonth -= 1
-                      if (calGrid.viewMonth < 0) {
-                        calGrid.viewMonth = 11
-                        calGrid.viewYear -= 1
-                      }
+              IconButton {
+                s: root.s
+                icon: "‹"
+                iconSize: 16
+                onClicked: {
+                  if (calSide.zoomLevel === "years") {
+                    yearsGrid.startYear = Math.max(calSide.minYear, yearsGrid.startYear - 12)
+                  } else if (calSide.zoomLevel === "months") {
+                    calGrid.viewYear = Math.max(calSide.minYear, calGrid.viewYear - 1)
+                  } else {
+                    calGrid.viewMonth -= 1
+                    if (calGrid.viewMonth < 0) {
+                      calGrid.viewMonth = 11
+                      calGrid.viewYear -= 1
                     }
                   }
                 }
               }
 
-              Rectangle {
-                width: s(26); height: s(26); radius: s(6)
-                color: nextMonthArea.containsMouse ? MatugenColors.bgElevated : "transparent"
-                Behavior on color { ColorAnimation { duration: 150 } }
-                Text {
-                  anchors.centerIn: parent
-                  text: "›"
-                  color: MatugenColors.accent; font.pixelSize: s(16); font.family: "JetBrainsMono Nerd Font"
-                }
-                MouseArea {
-                  id: nextMonthArea
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: {
-                    if (calSide.zoomLevel === "years") {
-                      yearsGrid.startYear = Math.min(calSide.maxYear - 11, yearsGrid.startYear + 12)
-                    } else if (calSide.zoomLevel === "months") {
-                      calGrid.viewYear = Math.min(calSide.maxYear, calGrid.viewYear + 1)
-                    } else {
-                      calGrid.viewMonth += 1
-                      if (calGrid.viewMonth > 11) {
-                        calGrid.viewMonth = 0
-                        calGrid.viewYear += 1
-                      }
+              IconButton {
+                s: root.s
+                icon: "›"
+                iconSize: 16
+                onClicked: {
+                  if (calSide.zoomLevel === "years") {
+                    yearsGrid.startYear = Math.min(calSide.maxYear - 11, yearsGrid.startYear + 12)
+                  } else if (calSide.zoomLevel === "months") {
+                    calGrid.viewYear = Math.min(calSide.maxYear, calGrid.viewYear + 1)
+                  } else {
+                    calGrid.viewMonth += 1
+                    if (calGrid.viewMonth > 11) {
+                      calGrid.viewMonth = 0
+                      calGrid.viewYear += 1
                     }
                   }
                 }
               }
 
-              Rectangle {
-                width: s(26); height: s(26); radius: s(6)
-                color: addEventHover.containsMouse ? MatugenColors.accentSoft : MatugenColors.bgElevated
-                Behavior on color { ColorAnimation { duration: 150 } }
-                Text {
-                  anchors.centerIn: parent
-                  text: "+"
-                  color: MatugenColors.accent
-                  font.pixelSize: s(14); font.weight: Font.Bold
-                  font.family: "JetBrainsMono Nerd Font"
-                  rotation: dayPanel.mode === "edit" && dayPanel.editingId === "" ? 45 : 0
-                  Behavior on rotation { NumberAnimation { duration: 150 } }
-                }
-                MouseArea {
-                  id: addEventHover
-                  anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                  onClicked: {
-                    if (dayPanel.mode === "edit" && dayPanel.editingId === "") {
-                      dayPanel.mode = dayPanel.selectedDate !== "" ? "list" : "hidden"
-                      return
-                    }
-                    dayPanel.selectedDate = dayPanel.selectedDate !== "" ? dayPanel.selectedDate : calGrid._keyFor(calGrid.viewYear, calGrid.viewMonth, calPopup.clockDate.getDate())
-                    dayPanel.editingId = ""
-                    dayPanel.mode = "edit"
-                    editForm.title = ""
-                    editForm.startDate = dayPanel.selectedDate
-                    editForm.endDate = dayPanel.selectedDate
-                    editForm.allDay = false
-                    editForm.startMin = 9 * 60
-                    editForm.endMin = 10 * 60
-                    editForm.color = eventStore.palette[0]
-                    editForm.reminders = []
-                    editForm.notes = ""
-                    editForm.travelTime = 0
-                    editForm.repeatFreq = "none"
-                    editForm.repeatCustomText = ""
+              IconButton {
+                s: root.s
+                readonly property bool creating: dayPanel.mode === "edit" && dayPanel.editingId === ""
+                icon: creating ? "\u2715" : "+"
+                iconSize: 14
+                active: creating
+                onClicked: {
+                  if (creating) {
+                    dayPanel.mode = dayPanel.selectedDate !== "" ? "list" : "hidden"
+                    return
                   }
+                  dayPanel.selectedDate = dayPanel.selectedDate !== "" ? dayPanel.selectedDate : calGrid._keyFor(calGrid.viewYear, calGrid.viewMonth, calPopup.clockDate.getDate())
+                  dayPanel.editingId = ""
+                  dayPanel.mode = "edit"
+                  editForm.title = ""
+                  editForm.startDate = dayPanel.selectedDate
+                  editForm.endDate = dayPanel.selectedDate
+                  editForm.allDay = false
+                  editForm.startMin = 9 * 60
+                  editForm.endMin = 10 * 60
+                  editForm.color = eventStore.palette[0]
+                  editForm.reminders = []
+                  editForm.notes = ""
+                  editForm.travelTime = 0
+                  editForm.repeatFreq = "none"
+                  editForm.repeatCustomText = ""
                 }
               }
             }
@@ -1514,13 +1301,14 @@ IpcHandler {
                     }
                   }
 
-                  TextField {
+                  TextBox {
                     id: titleField
+                    s: root.s
                     width: parent.width
-                    height: s(34)
+                    fieldHeight: 34
                     placeholderText: "Title"
                     text: editForm.title
-                    onTextChanged: if (text !== editForm.title) editForm.title = text
+                    onEdited: editForm.title = text
                   }
 
                   Column {
@@ -1619,24 +1407,11 @@ IpcHandler {
                       anchors.verticalCenter: parent.verticalCenter
                     }
 
-                    Rectangle {
-                      width: s(40); height: s(22); radius: s(11)
+                    ToggleSwitch {
+                      s: root.s
                       anchors.verticalCenter: parent.verticalCenter
-                      color: editForm.allDay ? MatugenColors.accent : MatugenColors.bgElevated
-                      Behavior on color { ColorAnimation { duration: 120 } }
-
-                      Rectangle {
-                        width: s(16); height: s(16); radius: s(8)
-                        anchors.verticalCenter: parent.verticalCenter
-                        x: editForm.allDay ? parent.width - width - s(3) : s(3)
-                        Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                        color: MatugenColors.bgBase
-                      }
-
-                      MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        onClicked: editForm.allDay = !editForm.allDay
-                      }
+                      checked: editForm.allDay
+                      onToggled: editForm.allDay = !editForm.allDay
                     }
                   }
 
@@ -1645,53 +1420,30 @@ IpcHandler {
                     z: 40
                     Text { text: "Repeat"; color: MatugenColors.textMuted; font.pixelSize: s(10); font.family: "JetBrainsMono Nerd Font"; leftPadding: 4 }
 
-                    Row {
-                      width: parent.width
-                      spacing: s(4)
-
-                      Repeater {
-                        model: [
-                          { key: "none",    text: "Never" },
-                          { key: "daily",   text: "Daily" },
-                          { key: "weekly",  text: "Weekly" },
-                          { key: "monthly", text: "Monthly" },
-                          { key: "yearly",  text: "Yearly" },
-                          { key: "custom",  text: "Custom" }
-                        ]
-                        Rectangle {
-                          required property var modelData
-                          width: (parent.width - s(4) * 5) / 6
-                          height: s(26)
-                          radius: 6
-                          color: editForm.repeatFreq === modelData.key ? MatugenColors.accent : (repeatOptHover.containsMouse ? MatugenColors.bgElevated : MatugenColors.bgElevated2)
-                          Behavior on color { ColorAnimation { duration: 120 } }
-
-                          Text {
-                            anchors.centerIn: parent
-                            text: modelData.text
-                            color: editForm.repeatFreq === modelData.key ? MatugenColors.accentText : MatugenColors.text
-                            font.pixelSize: s(9)
-                            font.family: "JetBrainsMono Nerd Font"
-                          }
-
-                          MouseArea {
-                            id: repeatOptHover
-                            anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                              editForm.repeatFreq = modelData.key
-                            }
-                          }
-                        }
-                      }
+                    SegmentedControl {
+                      s: root.s
+                      buttonHeight: 26
+                      buttonWidth: Math.floor((parent.width / root.s(1) - 20) / 6)
+                      choices: [
+                        { id: "none",    label: "Never" },
+                        { id: "daily",   label: "Daily" },
+                        { id: "weekly",  label: "Weekly" },
+                        { id: "monthly", label: "Monthly" },
+                        { id: "yearly",  label: "Yearly" },
+                        { id: "custom",  label: "Custom" }
+                      ]
+                      current: editForm.repeatFreq
+                      onPicked: function(id) { editForm.repeatFreq = id }
                     }
 
-                    TextField {
+                    TextBox {
+                      s: root.s
                       width: parent.width
-                      height: s(30)
+                      fieldHeight: 30
                       visible: editForm.repeatFreq === "custom"
                       placeholderText: "e.g. every 2 weeks on Friday"
                       text: editForm.repeatCustomText
-                      onTextChanged: if (text !== editForm.repeatCustomText) editForm.repeatCustomText = text
+                      onEdited: editForm.repeatCustomText = text
                     }
                   }
 
@@ -1699,131 +1451,17 @@ IpcHandler {
                     width: parent.width; spacing: 6
                     Text { text: "Travel time"; color: MatugenColors.textMuted; font.pixelSize: s(10); font.family: "JetBrainsMono Nerd Font"; leftPadding: 4 }
 
-                    component TravelTimeField : Item {
-                      id: ttRoot
-                      property int minutes: 0
-                      signal minutesEdited(int m)
 
-                      readonly property var options: [
-                        { text: "None",        value: 0 },
-                        { text: "5 minutes",   value: 5 },
-                        { text: "15 minutes",  value: 15 },
-                        { text: "30 minutes",  value: 30 },
-                        { text: "1 hour",      value: 60 },
-                        { text: "1 hour 30 min", value: 90 },
-                        { text: "2 hours",     value: 120 }
-                      ]
-                      readonly property string currentText: {
-                        for (var i = 0; i < options.length; i++) if (options[i].value === ttRoot.minutes) return options[i].text
-                        return ttRoot.minutes + " min"
-                      }
 
-                      width: parent ? parent.width : 200
-                      height: 34
-                      z: expanded ? 1000 : 1
-
-                      property bool expanded: false
-
-                      Rectangle {
-                        anchors.fill: parent
-                        radius: 8
-                        color: MatugenColors.bgElevated
-                        border.width: ttRoot.expanded ? 1 : 0
-                        border.color: MatugenColors.accent
-
-                        Text {
-                          anchors.left: parent.left
-                          anchors.leftMargin: 10
-                          anchors.verticalCenter: parent.verticalCenter
-                          text: ttRoot.currentText
-                          color: MatugenColors.text
-                          font.pixelSize: s(11)
-                          font.family: "JetBrainsMono Nerd Font"
-                        }
-
-                        Text {
-                          anchors.right: parent.right
-                          anchors.rightMargin: 10
-                          anchors.verticalCenter: parent.verticalCenter
-                          text: ttRoot.expanded ? "▲" : "▼"
-                          color: MatugenColors.textMuted
-                          font.pixelSize: s(8)
-                          font.family: "JetBrainsMono Nerd Font"
-                        }
-
-                        MouseArea {
-                          anchors.fill: parent
-                          cursorShape: Qt.PointingHandCursor
-                          onClicked: ttRoot.expanded = !ttRoot.expanded
-                        }
-                      }
-
-                      MouseArea {
-                        parent: calPopup.contentItem
-                        anchors.fill: parent
-                        visible: ttRoot.expanded
-                        z: 999
-                        onClicked: ttRoot.expanded = false
-                      }
-
-                      Rectangle {
-                        parent: calPopup.contentItem
-                        x: { var p = ttRoot.mapToItem(calPopup.contentItem, 0, 34 + 4); return p.x }
-                        y: { var p = ttRoot.mapToItem(calPopup.contentItem, 0, 34 + 4); return p.y }
-                        width: ttRoot.width
-                        height: ttCol.implicitHeight + 8
-                        radius: 8
-                        color: MatugenColors.bgElevated2
-                        border.width: 1
-                        border.color: MatugenColors.borderSoft
-                        visible: ttRoot.expanded
-                        z: 1000
-                        clip: true
-
-                        Column {
-                          id: ttCol
-                          width: parent.width
-                          anchors.margins: 4
-                          anchors.fill: parent
-                          spacing: 1
-
-                          Repeater {
-                            model: ttRoot.options
-                            Rectangle {
-                              required property var modelData
-                              width: parent.width
-                              height: 26
-                              radius: 5
-                              color: ttOptHover.containsMouse ? MatugenColors.bgElevated : "transparent"
-
-                              Text {
-                                anchors.left: parent.left
-                                anchors.leftMargin: 8
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: modelData.text
-                                color: MatugenColors.text
-                                font.pixelSize: s(10)
-                                font.family: "JetBrainsMono Nerd Font"
-                              }
-
-                              MouseArea {
-                                id: ttOptHover
-                                anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                  ttRoot.minutesEdited(modelData.value)
-                                  ttRoot.expanded = false
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-
-                    TravelTimeField {
+                    Dropdown {
+                      s: root.s
                       width: parent.width
-                      minutes: editForm.travelTime
-                      onMinutesEdited: function(m) { editForm.travelTime = m }
+                      boxHeight: 34
+                      options: root.travelOptions
+                      labelKey: "text"
+                      currentIndex: root.travelIndex(editForm.travelTime)
+                      text: currentIndex >= 0 ? "" : editForm.travelTime + " min"
+                      onPicked: function(index, value) { editForm.travelTime = value.value }
                     }
                   }
 
@@ -1938,8 +1576,8 @@ IpcHandler {
 
                       x: { var p = colorSection.mapToItem(calPopup.contentItem, 0, colorSection.height + 4); return p.x }
                       y: { var p = colorSection.mapToItem(calPopup.contentItem, 0, colorSection.height + 4); return p.y }
-                      width: 220
-                      height: pickerCol.implicitHeight + 20
+                      width: s(220)
+                      height: pickerCol.implicitHeight + s(20)
                       radius: 10
                       color: MatugenColors.bgElevated2
                       border.width: 1
@@ -1951,7 +1589,7 @@ IpcHandler {
                       Column {
                         id: pickerCol
                         anchors.fill: parent
-                        anchors.margins: 10
+                        anchors.margins: s(10)
                         spacing: 8
 
                         Rectangle {
@@ -1963,85 +1601,74 @@ IpcHandler {
                           border.color: MatugenColors.borderSoft
                         }
 
-                        TextField {
+                        TextBox {
                           id: hexField
+                          s: root.s
                           width: parent.width
-                          height: s(30)
+                          fieldHeight: 30
                           placeholderText: "#rrggbb"
                           text: colorPicker.pendingHex
-                          onTextChanged: {
-                            if (text !== colorPicker.pendingHex) colorPicker.pendingHex = text
-                          }
+                          onEdited: colorPicker.pendingHex = text
                         }
 
-                        Row {
-                          width: parent.width
-                          spacing: 6
+                        Repeater {
+                          model: ["r", "g", "b"]
+                          Row {
+                            required property string modelData
+                            width: parent.width
+                            spacing: s(8)
 
-                          Repeater {
-                            model: ["r", "g", "b"]
-                            Column {
-                              required property string modelData
-                              width: (parent.width - 12) / 3
-                              spacing: 2
+                            readonly property int channelVal: {
+                              var h = colorPicker.pendingHex
+                              if (!/^#[0-9a-fA-F]{6}$/.test(h)) return 0
+                              var off = modelData === "r" ? 1 : (modelData === "g" ? 3 : 5)
+                              return parseInt(h.substr(off, 2), 16)
+                            }
 
-                              readonly property int channelVal: {
+                            Text {
+                              anchors.verticalCenter: parent.verticalCenter
+                              width: s(10)
+                              text: modelData.toUpperCase()
+                              color: MatugenColors.textMuted
+                              font.pixelSize: s(10)
+                              font.family: "JetBrainsMono Nerd Font"
+                            }
+
+                            ValueSlider {
+                              s: root.s
+                              anchors.verticalCenter: parent.verticalCenter
+                              from: 0
+                              to: 255
+                              value: parent.channelVal
+                              trackWidth: 120
+                              labelWidth: 34
+                              onMoved: function(v) {
                                 var h = colorPicker.pendingHex
-                                if (!/^#[0-9a-fA-F]{6}$/.test(h)) return 0
-                                var off = modelData === "r" ? 1 : (modelData === "g" ? 3 : 5)
-                                return parseInt(h.substr(off, 2), 16)
-                              }
-
-                              Text {
-                                text: modelData.toUpperCase() + ": " + parent.channelVal
-                                color: MatugenColors.textMuted
-                                font.pixelSize: s(9)
-                                font.family: "JetBrainsMono Nerd Font"
-                              }
-
-                              Slider2 {
-                                width: parent.width
-                                value: parent.channelVal
-                                onMoved: function(v) {
-                                  var h = colorPicker.pendingHex
-                                  if (!/^#[0-9a-fA-F]{6}$/.test(h)) h = "#000000"
-                                  var r = parseInt(h.substr(1, 2), 16)
-                                  var g = parseInt(h.substr(3, 2), 16)
-                                  var b = parseInt(h.substr(5, 2), 16)
-                                  var nv = Math.max(0, Math.min(255, Math.round(v)))
-                                  if (modelData === "r") r = nv
-                                  else if (modelData === "g") g = nv
-                                  else b = nv
-                                  function hx(n) { var s2 = n.toString(16); return s2.length < 2 ? "0" + s2 : s2 }
-                                  colorPicker.pendingHex = "#" + hx(r) + hx(g) + hx(b)
-                                }
+                                if (!/^#[0-9a-fA-F]{6}$/.test(h)) h = "#000000"
+                                var r = parseInt(h.substr(1, 2), 16)
+                                var g = parseInt(h.substr(3, 2), 16)
+                                var b = parseInt(h.substr(5, 2), 16)
+                                if (modelData === "r") r = v
+                                else if (modelData === "g") g = v
+                                else b = v
+                                function hx(n) { var s2 = n.toString(16); return s2.length < 2 ? "0" + s2 : s2 }
+                                colorPicker.pendingHex = "#" + hx(r) + hx(g) + hx(b)
                               }
                             }
                           }
                         }
 
-                        Rectangle {
+                        ClickButton {
+                          s: root.s
                           width: parent.width
-                          height: s(26)
-                          radius: s(6)
-                          color: applyHover.containsMouse ? Qt.lighter(MatugenColors.accent, 1.1) : MatugenColors.accent
-                          opacity: /^#[0-9a-fA-F]{6}$/.test(colorPicker.pendingHex) ? 1.0 : 0.5
-                          Behavior on color { ColorAnimation { duration: 120 } }
-                          Text {
-                            anchors.centerIn: parent
-                            text: "Apply"
-                            color: MatugenColors.accentText
-                            font.pixelSize: s(10); font.weight: Font.Bold
-                            font.family: "JetBrainsMono Nerd Font"
-                          }
-                          MouseArea {
-                            id: applyHover
-                            anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                              if (!/^#[0-9a-fA-F]{6}$/.test(colorPicker.pendingHex)) return
-                              editForm.color = colorPicker.pendingHex
-                              colorPicker.open = false
-                            }
+                          text: "Apply"
+                          variant: "primary"
+                          fontSize: 11
+                          buttonHeight: 26
+                          enabled: /^#[0-9a-fA-F]{6}$/.test(colorPicker.pendingHex)
+                          onClicked: {
+                            editForm.color = colorPicker.pendingHex
+                            colorPicker.open = false
                           }
                         }
                       }
@@ -2067,74 +1694,52 @@ IpcHandler {
                     }
                   }
 
-                  Row {
+                  RowLayout {
                     width: parent.width - 8
                     anchors.right: parent.right
                     height: s(34)
                     spacing: s(8)
 
-                    Rectangle {
-                      width: dayPanel.editingId !== "" ? (parent.width - 8) * 0.32 : 0
-                      height: s(34); radius: s(8)
+                    DeleteButton {
+                      s: root.s
+                      size: 34
+                      iconSize: 15
                       visible: dayPanel.editingId !== ""
-                      color: deleteHover.containsMouse ? MatugenColors.error : MatugenColors.bgElevated2
-                      Behavior on color { ColorAnimation { duration: 150 } }
-                      Text {
-                        anchors.centerIn: parent
-                        text: "Delete"
-                        color: deleteHover.containsMouse ? MatugenColors.bgBase : MatugenColors.error
-                        font.pixelSize: s(11); font.weight: Font.Bold
-                        font.family: "JetBrainsMono Nerd Font"
-                      }
-                      MouseArea {
-                        id: deleteHover
-                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                          eventStore.removeEvent(dayPanel.editingId)
-                          dayPanel.mode = "list"
-                          editForm.title = ""
-                        }
+                      onClicked: {
+                        eventStore.removeEvent(dayPanel.editingId)
+                        dayPanel.mode = "list"
+                        editForm.title = ""
                       }
                     }
 
-                    Rectangle {
-                      width: dayPanel.editingId !== "" ? parent.width - (parent.width - 8) * 0.32 - 8 : parent.width
-                      height: s(34); radius: s(8)
-                      color: saveHover.containsMouse ? Qt.lighter(MatugenColors.accent, 1.1) : MatugenColors.accent
-                      opacity: editForm.title.trim().length > 0 ? 1.0 : 0.5
-                      Behavior on color { ColorAnimation { duration: 150 } }
-                      Text {
-                        anchors.centerIn: parent
-                        text: "Save"
-                        color: MatugenColors.accentText
-                        font.pixelSize: s(11); font.weight: Font.Bold
-                        font.family: "JetBrainsMono Nerd Font"
-                      }
-                      MouseArea {
-                        id: saveHover
-                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                          if (editForm.title.trim().length === 0) return
-                          var payload = {
-                            title: editForm.title.trim(),
-                            startDate: editForm.startDate,
-                            endDate: editForm.endDate,
-                            allDay: editForm.allDay,
-                            startMin: editForm.startMin,
-                            endMin: editForm.endMin,
-                            color: editForm.color,
-                            reminders: editForm.reminderList(),
-                            notes: editForm.notes,
-                            travelTime: editForm.travelTime,
-                            repeat: editForm.repeatValue()
-                          }
-                          if (dayPanel.editingId === "")
-                            eventStore.addEvent(payload)
-                          else
-                            eventStore.updateEvent(dayPanel.editingId, payload)
-                          dayPanel.mode = "list"
-                          editForm.title = ""
+                    ClickButton {
+                      s: root.s
+                      fill: true
+                      variant: "primary"
+                      text: "Save"
+                      fontSize: 11
+                      buttonHeight: 34
+                      enabled: editForm.title.trim().length > 0
+                      onClicked: {
+                        var payload = {
+                          title: editForm.title.trim(),
+                          startDate: editForm.startDate,
+                          endDate: editForm.endDate,
+                          allDay: editForm.allDay,
+                          startMin: editForm.startMin,
+                          endMin: editForm.endMin,
+                          color: editForm.color,
+                          reminders: editForm.reminderList(),
+                          notes: editForm.notes,
+                          travelTime: editForm.travelTime,
+                          repeat: editForm.repeatValue()
                         }
+                        if (dayPanel.editingId === "")
+                          eventStore.addEvent(payload)
+                        else
+                          eventStore.updateEvent(dayPanel.editingId, payload)
+                        dayPanel.mode = "list"
+                        editForm.title = ""
                       }
                     }
                   }

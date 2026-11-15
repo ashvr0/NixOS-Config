@@ -1013,3 +1013,28 @@ button[data-testid="control-button-npv-episodes"] svg {
 a[href="https://xpui.app.spotify.com/premium?ref=desktop_loggedin_upgrade_menu"] {
   display: none !important;
 }
+
+/* Make buttons flat no round */
+button[data-encore-id="buttonPrimary"] {
+  border-radius: 0px;
+  box-shadow: none;
+  background-image: none;
+}
+
+button[data-encore-id="buttonPrimary"] .e-101040-button-primary__inner {
+  border-radius: 0px;
+  box-shadow: none;
+  background-image: none;
+}
+
+button[data-testid="playlist-edit-details-save-button"] {
+  border-radius: 0px;
+  box-shadow: none;
+  background-image: none;
+}
+
+button[data-testid="playlist-edit-details-save-button"] .e-101040-button-primary__inner {
+  border-radius: 0px;
+  box-shadow: none;
+  background-image: none;
+}

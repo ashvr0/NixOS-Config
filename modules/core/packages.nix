@@ -53,7 +53,6 @@ in
       gnumake
       pkg-config
       yazi
-      thunar
       unzip
       libreoffice
       librewolf 
@@ -67,9 +66,11 @@ in
       # Theming and icons
       papirus-icon-theme
       nordic
+      bibata-cursors
       matugen
       mpvpaper
       awww
+      adw-gtk3
 
       # fun tools
       fastfetch

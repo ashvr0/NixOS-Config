@@ -10,5 +10,6 @@
     ./user.nix
     ./ly.nix
     ./hyprland.nix
+    ./thunar.nix
   ];
 }

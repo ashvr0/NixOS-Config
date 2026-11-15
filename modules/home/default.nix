@@ -16,7 +16,6 @@ in
     ./nvim/default.nix
     ./fastfetch/default.nix
     ./yazi.nix
-    inputs.serpantinum.homeManagerModules.default
     ./serpantinum.nix
   ];
 

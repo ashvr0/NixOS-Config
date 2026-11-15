@@ -2,7 +2,6 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "../"
 
 Item {
     id: root
@@ -72,41 +71,51 @@ Item {
 
     Component.onCompleted: root.applyActiveScheme()
 
-    Process {
-        id: themeReader
-        command: ["cat", Quickshell.env("HOME") + "/.config/quickshell/colors.json"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                let txt = this.text.trim();
-                if (txt !== "" && txt !== root.rawJson) {
-                    root.rawJson = txt;
-                    try {
-                        let c = JSON.parse(txt);
-                        if (c.bg_base) root.mBgBase = c.bg_base;
-                        if (c.bg_elevated) root.mBgElevated = c.bg_elevated;
-                        if (c.bg_elevated2) root.mBgElevated2 = c.bg_elevated2;
-                        if (c.border) root.mBorder = c.border;
-                        if (c.border_soft) root.mBorderSoft = c.border_soft;
-                        if (c.text) root.mText = c.text;
-                        if (c.text_muted) root.mTextMuted = c.text_muted;
-                        if (c.text_dim) root.mTextDim = c.text_dim;
-                        if (c.accent) root.mAccent = c.accent;
-                        if (c.accent_text) root.mAccentText = c.accent_text;
-                        if (c.accent_soft) root.mAccentSoft = c.accent_soft;
-                        if (c.error) root.mError = c.error;
-                        if (c.warning) root.mWarning = c.warning;
-                        if (Config.colorScheme === "matugen") root.applyActiveScheme();
-                    } catch(e) {}
-                }
-            }
+    // Sets one color property safely. Bad values are logged instead of silently aborting the whole load.
+    function setColor(key, value) {
+        if (value === undefined || value === null || value === "") return
+        try {
+            root[key] = value
+        } catch (e) {
+            console.warn("MatugenColors: bad value for " + key + ": " + value + " (" + e + ")")
         }
     }
 
-    Timer {
-        interval: 1000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: themeReader.running = true
+    function applyJson(txt) {
+        txt = txt.trim()
+        if (txt === "" || txt === root.rawJson) return
+        let c
+        try {
+            c = JSON.parse(txt)
+        } catch (e) {
+            console.warn("MatugenColors: colors.json is not valid JSON: " + e)
+            return
+        }
+        root.rawJson = txt
+        root.setColor("mBgBase", c.bg_base)
+        root.setColor("mBgElevated", c.bg_elevated)
+        root.setColor("mBgElevated2", c.bg_elevated2)
+        root.setColor("mBorder", c.border)
+        root.setColor("mBorderSoft", c.border_soft)
+        root.setColor("mText", c.text)
+        root.setColor("mTextMuted", c.text_muted)
+        root.setColor("mTextDim", c.text_dim)
+        root.setColor("mAccent", c.accent)
+        root.setColor("mAccentText", c.accent_text)
+        root.setColor("mAccentSoft", c.accent_soft)
+        root.setColor("mError", c.error)
+        root.setColor("mWarning", c.warning)
+        console.log("MatugenColors: loaded colors.json, scheme=" + Config.colorScheme + ", accent=" + root.mAccent)
+        if (Config.colorScheme === "matugen") root.applyActiveScheme()
+    }
+
+    FileView {
+        id: colorsFile
+        path: Quickshell.env("HOME") + "/.local/state/quickshell/colors.json"
+        watchChanges: true
+        printErrors: false   // file may not exist before matugen first runs
+        onFileChanged: reload()
+        onLoaded: root.applyJson(text())
+        onLoadFailed: error => console.warn("MatugenColors: could not read colors.json: " + error)
     }
 }

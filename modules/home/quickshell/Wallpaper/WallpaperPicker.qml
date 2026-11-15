@@ -16,6 +16,13 @@ Scope {
       root.visible = !root.visible
     }
   }
+
+  // Decoded height of every thumbnail. The warmup images and the real delegates must
+  // use the same value, because Qt's image cache key includes the requested size.
+  property int thumbSize: 512
+  // How many thumbnails around the selection are kept decoded while the picker is closed.
+  property int warmCount: 16
+
   property bool visible: false
   property string lockFile: Quickshell.env("HOME") + "/.cache/wallpaper-picker.lock"
   property string cacheDir: Quickshell.env("HOME") + "/.cache/wallpaper-picker"
@@ -38,7 +45,56 @@ Scope {
     root.restoreSession()
     colorExtractProc.running = true
     root.loadPosters()
+    // A hot reload can drop a theme job that was still waiting for its reveal. Resume it.
+    Quickshell.execDetached(["bash", "-c", root.themeJob, "_", "", "resume"])
   }
+
+  WallpaperBackground { id: bgRenderer }
+
+  // Theming. matugen writes colors.json to ~/.local/state/quickshell, outside the shell
+  // config directory, so it never triggers a hot reload and can run right away.
+  // The job below serializes runs and always applies the newest wallpaper.
+  property string themeJob: [
+    'CACHE="$HOME/.cache/wallpaper-picker"',
+    'mkdir -p "$CACHE" "$HOME/.local/state/quickshell"',
+    'MODE="$2"',
+    'exec >> /tmp/wallpaper-theme.log 2>&1',
+    'echo "$(date +%T) job mode=$MODE arg=$1"',
+    'if [ "$MODE" = "intent" ] || [ "$MODE" = "run" ]; then printf "%s" "$1" > "$CACHE/theme_target"; fi',
+    '[ "$MODE" = "intent" ] && exit 0',
+    'exec 9>"$CACHE/theme.lock"',
+    'flock -w 60 9 || echo "lock wait timed out, continuing"',
+    'target=$(cat "$CACHE/theme_target" 2>/dev/null)',
+    'applied=$(cat "$CACHE/theme_applied" 2>/dev/null)',
+    'echo "$(date +%T) target=$target applied=$applied"',
+    '[ -n "$target" ] || exit 0',
+    '[ "$target" = "$applied" ] && exit 0',
+    'lower=$(printf "%s" "$target" | tr "[:upper:]" "[:lower:]")',
+    'src="$target"',
+    'frame=""',
+    'case "$lower" in',
+    '  *.mp4|*.mkv|*.webm|*.mov)',
+    '    frame=$(mktemp /tmp/matugen_frame.XXXXXX.png)',
+    '    ffmpeg -y -loglevel error -ss 00:00:01 -i "$target" -frames:v 1 "$frame" >> /tmp/matugen.log 2>&1',
+    '    src="$frame" ;;',
+    'esac',
+    'if [ -s "$src" ] && matugen image "$src" -m dark --source-color-index 0 >> /tmp/matugen.log 2>&1 9>&-; then',
+    '  printf "%s" "$target" > "$CACHE/theme_applied"',
+    '  echo "$(date +%T) matugen ok: $target"',
+    'else',
+    '  echo "$(date +%T) matugen FAILED: $target (see /tmp/matugen.log)"',
+    'fi',
+    '[ -n "$frame" ] && rm -f "$frame"',
+    'if pgrep -x cava > /dev/null; then',
+    '  cat ~/.config/cava/config_base ~/.config/cava/colors > ~/.config/cava/config 2>/dev/null',
+    '  pkill -USR1 cava',
+    'fi'
+  ].join("\n")
+
+  function applyTheme(path) {
+    Quickshell.execDetached(["bash", "-c", root.themeJob, "_", path, "run"])
+  }
+
   Component.onDestruction: {
     root.saveSession()
     Quickshell.execDetached(["bash", "-c", "rm -f '" + root.lockFile + "'"])
@@ -331,6 +387,45 @@ Scope {
       root.selectedIndex = -1
     }
   }
+
+  // Thumbnail warmup
+  // These images live outside the PanelWindow, so they stay decoded in Qt's pixmap cache
+  // while the picker is closed. When it opens, the real thumbnails hit the cache and show
+  // right away instead of decoding from disk.
+  property var warmNames: []
+
+  function refreshWarmList() {
+    const all = root.wallpapers
+    if (!all || all.length === 0) {
+      root.warmNames = []
+      return
+    }
+    let center = 0
+    if (root.selectedIndex >= 0 && root.selectedIndex < filteredModel.values.length)
+      center = all.indexOf(filteredModel.values[root.selectedIndex])
+    if (center < 0) center = 0
+    const start = Math.max(0, center - 6)
+    root.warmNames = all
+      .slice(start, start + root.warmCount)
+      .filter(n => !root.isVideoContainerFile(n))
+  }
+
+  Repeater {
+    model: root.warmNames
+    delegate: Image {
+      required property string modelData
+      source: "file://" + root.wallpaperDir + "/" + modelData
+      asynchronous: true
+      cache: true
+      sourceSize.height: root.thumbSize
+    }
+  }
+
+  onVisibleChanged: {
+    // Re-center the warm set on whatever was just picked
+    if (!visible) root.refreshWarmList()
+  }
+
   FileView {
     id: sessionFile
     path: root.cacheDir + "/session.json"
@@ -369,6 +464,7 @@ Scope {
       if (idx !== -1) root.selectedIndex = idx
       root._pendingRestoreName = ""
     }
+    root.refreshWarmList()
   }
   ListModel { id: monitorModel }
 
@@ -421,52 +517,43 @@ Scope {
     const escapeBash = (str) => String(str).replace(/(["\\$`])/g, '\\$1')
     const escPath = escapeBash(fullPath)
     const escOutputs = escapeBash(outputs)
+    const isVideoContainer = root.isVideoContainerFile(filename)
 
-    if (root.isVideoContainerFile(filename)) {
+    if (isVideoContainer) {
       root.snapshotSelectedVideo(filename)
     }
 
-    let wallpaperCmd
-    if (root.isVideoFile(filename)) {
+    if (isVideoContainer) {
+      // Video: mpvpaper still required, no QtMultimedia in this build.
+      let mpvCmd
       if (outputs === "all") {
-        wallpaperCmd = `mpvpaper -o 'loop --no-audio --hwdec=auto' '*' "${escPath}" &`
+        mpvCmd = `mpvpaper -o 'loop --no-audio --hwdec=auto' '*' "${escPath}" &`
       } else {
-        wallpaperCmd =
+        mpvCmd =
           `IFS=',' read -ra MONS <<< "${escOutputs}"\n` +
           `for m in "\${MONS[@]}"; do mpvpaper -o 'loop --no-audio --hwdec=auto' "$m" "${escPath}" & done`
       }
+      const script = "#!/usr/bin/env bash\n" +
+        "pkill mpvpaper 2>/dev/null || true\n" +
+        mpvCmd + "\n"
+      Quickshell.execDetached(["bash", "-c",
+        `SCRIPT=$(mktemp /tmp/apply-wallpaper.XXXXXX.sh); cat > "$SCRIPT" << 'WPEOF'\n${script}\nWPEOF\nchmod +x "$SCRIPT"; setsid "$SCRIPT" < /dev/null &> /dev/null & disown; sleep 15; rm -f "$SCRIPT"`
+      ])
+
+      root.applyTheme(fullPath)
     } else {
-      const outputFlag = outputs === "all" ? "" : `-o "${escOutputs}"`
-      wallpaperCmd = `awww img ${outputFlag} "${escPath}" --transition-type wave --transition-angle 30 --transition-wave "60,30" --transition-step 90 --transition-fps 60`
+      // Image: instant, no subprocess. Kill any running mpvpaper
+      // (leftover from a previous video) so it doesn't stay on top,
+      // then swap the QML renderer's source directly.
+      Quickshell.execDetached(["bash", "-c", "pkill mpvpaper 2>/dev/null || true"])
+      // One plan shared by every screen so they all play the same transition
+      const tplan = WallpaperTransition.plan(null)
+      for (let i = 0; i < bgRenderer.instances.length; i++) {
+        bgRenderer.instances[i].setWallpaper(fullPath, tplan)
+      }
+      root.applyTheme(fullPath)
     }
 
-    const isVideoContainer = root.isVideoContainerFile(filename)
-    const matugenBlock = isVideoContainer
-      ? `FRAME_PATH="/tmp/matugen_frame_$$.png"\n` +
-        `ffmpeg -y -loglevel error -ss 00:00:01 -i "${escPath}" -frames:v 1 "$FRAME_PATH" >> /tmp/matugen.log 2>&1\n` +
-        `if [ -s "$FRAME_PATH" ]; then\n` +
-        `  matugen image "$FRAME_PATH" -m dark --source-color-index 0 >> /tmp/matugen.log 2>&1\n` +
-        `  rm -f "$FRAME_PATH"\n` +
-        `else\n` +
-        `  echo "[$(date +'%H:%M:%S')] frame extraction failed for ${escPath}" >> /tmp/matugen.log\n` +
-        `fi\n`
-      : `matugen image "${escPath}" -m dark --source-color-index 0 >> /tmp/matugen.log 2>&1\n`
-
-    const cavaBlock =
-      `if pgrep -x "cava" > /dev/null; then\n` +
-      `  cat ~/.config/cava/config_base ~/.config/cava/colors > ~/.config/cava/config 2>/dev/null\n` +
-      `  pkill -USR1 cava\n` +
-      `fi\n`
-
-    const script = "#!/usr/bin/env bash\n" +
-      "pkill mpvpaper 2>/dev/null || true\n" +
-      wallpaperCmd + "\n" +
-      matugenBlock +
-      cavaBlock
-
-    Quickshell.execDetached(["bash", "-c",
-      `SCRIPT=$(mktemp /tmp/apply-wallpaper.XXXXXX.sh); cat > "$SCRIPT" << 'WPEOF'\n${script}\nWPEOF\nchmod +x "$SCRIPT"; setsid "$SCRIPT" < /dev/null &> /dev/null & disown; sleep 15; rm -f "$SCRIPT"`
-    ])
     closeTimer.start()
   }
 
@@ -479,16 +566,22 @@ Scope {
   PanelWindow {
     id: overlay
     color: "transparent"
-    visible: root.visible
+
+    // Drives the fade. The window stays mapped until the fade out finishes.
+    property real anim: root.visible ? 1.0 : 0.0
+    Behavior on anim { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+    visible: root.visible || anim > 0.01
 
     function s(val) { return Scaler.s(val) }
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+    // Release the keyboard as soon as the picker closes, not after the fade
+    WlrLayershell.keyboardFocus: root.visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.namespace: "qs-wallpaper-picker"
     anchors { top: true; left: true; right: true; bottom: true }
 
+    // Click anywhere empty to close
     MouseArea {
       anchors.fill: parent
       onClicked: root.visible = false
@@ -499,129 +592,145 @@ Scope {
       focus: true
       Keys.onEscapePressed: root.visible = false
 
-      Rectangle {
-        id: card
-        anchors.centerIn: parent
-        width: parent.width * 0.55
-        height: parent.height * 0.30
-        radius: overlay.s(14)
-        clip: true
-        focus: true
-        color: MatugenColors.bgBase
+      Item {
+        id: stage
+        anchors.fill: parent
+        opacity: overlay.anim
 
-        opacity: root.wallpapers.length > 0 ? 1 : 0
-        scale: root.wallpapers.length > 0 ? 1 : 0.95
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-        Behavior on scale { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
-
-        Keys.onEscapePressed: root.visible = false
-        MouseArea { anchors.fill: parent }
-
+        // Search bar and color filters, top middle
         ColumnLayout {
-          anchors.fill: parent
-          anchors.margins: overlay.s(20)
-          spacing: overlay.s(14)
+          id: controls
+          anchors.bottom: carousel.top
+          anchors.bottomMargin: overlay.s(24)
+          anchors.horizontalCenter: parent.horizontalCenter
+          width: Math.min(parent.width * 0.5, overlay.s(620))
+          spacing: overlay.s(12)
+          transform: Translate { y: (1 - overlay.anim) * -overlay.s(14) }
 
           Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: overlay.s(46)
             radius: overlay.s(10)
-            color: Qt.rgba(MatugenColors.bgElevated.r, MatugenColors.bgElevated.g, MatugenColors.bgElevated.b, 0.85)
+            color: Qt.rgba(MatugenColors.bgElevated.r, MatugenColors.bgElevated.g, MatugenColors.bgElevated.b, 0.92)
             border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.06)
+            border.color: Qt.rgba(1, 1, 1, 0.08)
 
-            Row {
-              anchors.fill: parent
-              anchors.leftMargin: overlay.s(14)
-              anchors.rightMargin: overlay.s(14)
-              spacing: overlay.s(8)
+            Text {
+              id: searchIcon
+              anchors.left: parent.left
+              anchors.leftMargin: overlay.s(18)
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf002"
+              font.pixelSize: overlay.s(14)
+              font.family: "JetBrainsMono Nerd Font"
+              color: MatugenColors.textDim
+            }
 
-              TextInput {
-                id: searchInput
-                width: parent.width - overlay.s(24)
-                anchors.verticalCenter: parent.verticalCenter
-                font.pixelSize: overlay.s(14)
-                font.family: "JetBrainsMono Nerd Font"
-                color: MatugenColors.text
-                text: root.filterText
-                focus: true
-                clip: true
+            TextInput {
+              id: searchInput
+              anchors.left: searchIcon.right
+              anchors.leftMargin: overlay.s(12)
+              anchors.right: parent.right
+              anchors.rightMargin: overlay.s(18)
+              anchors.verticalCenter: parent.verticalCenter
+              font.pixelSize: overlay.s(14)
+              font.family: "JetBrainsMono Nerd Font"
+              color: MatugenColors.text
+              text: root.filterText
+              focus: true
+              clip: true
 
-                onTextChanged: {
-                  root.filterText = text
-                  root.clampSelection()
+              onTextChanged: {
+                root.filterText = text
+                root.clampSelection()
+              }
+
+              Keys.onEscapePressed: root.visible = false
+              Keys.onReturnPressed: {
+                if (root.selectedIndex >= 0 && root.selectedIndex < filteredModel.values.length) {
+                  root.applyWallpaper(filteredModel.values[root.selectedIndex])
+                } else if (filteredModel.values.length > 0) {
+                  root.applyWallpaper(filteredModel.values[0])
                 }
+              }
+              Keys.onLeftPressed: if (root.selectedIndex > 0) root.selectedIndex--
+              Keys.onRightPressed: if (root.selectedIndex < filteredModel.values.length - 1) root.selectedIndex++
 
-                Keys.onEscapePressed: root.visible = false
-                Keys.onReturnPressed: {
-                  if (root.selectedIndex >= 0 && root.selectedIndex < filteredModel.values.length) {
-                    root.applyWallpaper(filteredModel.values[root.selectedIndex])
-                  } else if (filteredModel.values.length > 0) {
-                    root.applyWallpaper(filteredModel.values[0])
-                  }
-                }
-                Keys.onLeftPressed: if (root.selectedIndex > 0) root.selectedIndex--
-                Keys.onRightPressed: if (root.selectedIndex < filteredModel.values.length - 1) root.selectedIndex++
-
-                Text {
-                  text: "Search wallpapers..."
-                  font: parent.font
-                  color: Qt.rgba(MatugenColors.text.r, MatugenColors.text.g, MatugenColors.text.b, 0.4)
-                  visible: searchInput.text.length === 0
-                }
+              Text {
+                text: "Search wallpapers..."
+                font: parent.font
+                color: Qt.rgba(MatugenColors.text.r, MatugenColors.text.g, MatugenColors.text.b, 0.4)
+                visible: searchInput.text.length === 0
               }
             }
           }
 
-          RowLayout {
+          Item {
             Layout.fillWidth: true
-            spacing: overlay.s(8)
+            Layout.preferredHeight: overlay.s(30)
 
-            Rectangle {
-              width: overlay.s(28); height: overlay.s(28); radius: overlay.s(8)
-              color: root.colorFilter === "" ? MatugenColors.accent : "transparent"
-              border.width: 1
-              border.color: Qt.rgba(1, 1, 1, 0.15)
-              Text {
-                anchors.centerIn: parent
-                text: "All"
-                font.pixelSize: overlay.s(9)
-                font.family: "JetBrainsMono Nerd Font"
-                color: root.colorFilter === "" ? MatugenColors.bgBase : MatugenColors.text
-              }
-              MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.colorFilter = ""; root.clampSelection() } }
-            }
+            Row {
+              anchors.centerIn: parent
+              height: overlay.s(28)
+              spacing: overlay.s(8)
 
-            Repeater {
-              model: root.colorSwatches
-              delegate: Rectangle {
-                width: overlay.s(24); height: overlay.s(24); radius: overlay.s(12)
-                color: modelData.hex
-                border.width: root.colorFilter === modelData.name ? overlay.s(2) : 1
-                border.color: root.colorFilter === modelData.name ? MatugenColors.text : Qt.rgba(1, 1, 1, 0.15)
+              Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: overlay.s(28); height: overlay.s(28); radius: overlay.s(8)
+                color: root.colorFilter === ""
+                       ? MatugenColors.accent
+                       : Qt.rgba(MatugenColors.bgElevated.r, MatugenColors.bgElevated.g, MatugenColors.bgElevated.b, 0.92)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.15)
+                Text {
+                  anchors.centerIn: parent
+                  text: "All"
+                  font.pixelSize: overlay.s(9)
+                  font.family: "JetBrainsMono Nerd Font"
+                  color: root.colorFilter === "" ? MatugenColors.bgBase : MatugenColors.text
+                }
                 MouseArea {
                   anchors.fill: parent
                   cursorShape: Qt.PointingHandCursor
-                  onClicked: {
-                    root.colorFilter = root.colorFilter === modelData.name ? "" : modelData.name
-                    root.clampSelection()
+                  onClicked: { root.colorFilter = ""; root.clampSelection() }
+                }
+              }
+
+              Repeater {
+                model: root.colorSwatches
+                delegate: Rectangle {
+                  required property var modelData
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: overlay.s(24); height: overlay.s(24); radius: overlay.s(12)
+                  color: modelData.hex
+                  border.width: root.colorFilter === modelData.name ? overlay.s(2) : 1
+                  border.color: root.colorFilter === modelData.name ? MatugenColors.text : Qt.rgba(1, 1, 1, 0.2)
+                  scale: root.colorFilter === modelData.name ? 1.15 : 1.0
+                  Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                      root.colorFilter = root.colorFilter === modelData.name ? "" : modelData.name
+                      root.clampSelection()
+                    }
                   }
                 }
               }
-            }
 
-            Item { Layout.fillWidth: true }
+              Item { visible: monitorModel.count > 1; width: overlay.s(10); height: 1 }
 
-            Row {
-              visible: monitorModel.count > 1
-              spacing: overlay.s(6)
               Repeater {
                 model: monitorModel
                 delegate: Rectangle {
-                  width: monLabel.implicitWidth + overlay.s(12)
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: monitorModel.count > 1
+                  width: monLabel.implicitWidth + overlay.s(16)
                   height: overlay.s(24)
-                  radius: overlay.s(6)
-                  color: model.selected ? MatugenColors.accent : "transparent"
+                  radius: overlay.s(8)
+                  color: model.selected
+                         ? MatugenColors.accent
+                         : Qt.rgba(MatugenColors.bgElevated.r, MatugenColors.bgElevated.g, MatugenColors.bgElevated.b, 0.92)
                   border.width: 1
                   border.color: Qt.rgba(1, 1, 1, 0.15)
                   Text {
@@ -632,177 +741,211 @@ Scope {
                     font.family: "JetBrainsMono Nerd Font"
                     color: model.selected ? MatugenColors.bgBase : MatugenColors.text
                   }
-                  MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.toggleMonitor(index) }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleMonitor(index)
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Carousel. Selected wallpaper is wide and always centered, the rest are thin slivers.
+        Item {
+          id: carousel
+          anchors.left: parent.left
+          anchors.right: parent.right
+          // Controls plus carousel are centered together as one group
+          y: (stage.height - (controls.implicitHeight + overlay.s(24) + itemH + overlay.s(40))) / 2
+             + controls.implicitHeight + overlay.s(24)
+          height: itemH + overlay.s(40)
+          scale: 0.97 + 0.03 * overlay.anim
+
+          readonly property real thinW: overlay.s(64)
+          readonly property real gap: overlay.s(10)
+          readonly property real itemH: Math.max(overlay.s(120), Math.min(stage.height * 0.45, overlay.s(440)))
+          readonly property real wideW: Math.min(width * 0.55, itemH * overlay.width / Math.max(1, overlay.height))
+          readonly property real topY: 0
+          readonly property real cx: width / 2
+          // How many items on each side of the selection get a decoded image
+          readonly property int loadRange: Math.ceil(width / (2 * (thinW + gap))) + 2
+
+          Repeater {
+            model: filteredModel
+
+            delegate: Item {
+              id: thumbCard
+              required property string modelData
+              required property int index
+
+              readonly property int d: thumbCard.index - root.selectedIndex
+              readonly property bool isCurrent: root.selectedIndex >= 0 && d === 0
+              readonly property bool near: root.selectedIndex >= 0 && Math.abs(d) <= carousel.loadRange
+
+              readonly property bool isVideo: root.isVideoFile(thumbCard.modelData)
+              readonly property bool isVideoContainer: root.isVideoContainerFile(thumbCard.modelData)
+
+              visible: near
+              y: carousel.topY
+              height: carousel.itemH
+              width: isCurrent ? carousel.wideW : carousel.thinW
+              x: {
+                const step = carousel.thinW + carousel.gap
+                if (d === 0) return carousel.cx - carousel.wideW / 2
+                if (d > 0) return carousel.cx + carousel.wideW / 2 + carousel.gap + (d - 1) * step
+                return carousel.cx - carousel.wideW / 2 - (-d) * step
+              }
+              opacity: isCurrent ? 1.0 : (thumbArea.containsMouse ? 0.95 : 0.55)
+
+              Behavior on x { enabled: thumbCard.near; NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+              Behavior on width { enabled: thumbCard.near; NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+              Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+
+              Rectangle {
+                anchors.fill: parent
+                radius: overlay.s(6)
+                clip: true
+                color: Qt.rgba(MatugenColors.bgElevated.r, MatugenColors.bgElevated.g, MatugenColors.bgElevated.b, 0.6)
+
+                // Still images. Fades in once decoded, so a late thumbnail never pops in.
+                Image {
+                  anchors.fill: parent
+                  visible: !thumbCard.isVideoContainer
+                  source: (thumbCard.isVideoContainer || !thumbCard.near) ? "" : "file://" + root.wallpaperDir + "/" + thumbCard.modelData
+                  fillMode: Image.PreserveAspectCrop
+                  asynchronous: true
+                  cache: true
+                  smooth: true
+                  sourceSize.height: root.thumbSize
+                  opacity: status === Image.Ready ? 1.0 : 0.0
+                  Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                }
+
+                // Video posters
+                Image {
+                  anchors.fill: parent
+                  visible: thumbCard.isVideoContainer
+                  source: {
+                    root.posterCacheVersion
+                    return (thumbCard.isVideoContainer && thumbCard.near)
+                          ? "file://" + root.posterDir + "/" + thumbCard.modelData + ".jpg"
+                          : ""
+                  }
+                  fillMode: Image.PreserveAspectCrop
+                  asynchronous: true
+                  smooth: true
+                  cache: false
+
+                  Text {
+                    anchors.centerIn: parent
+                    visible: parent.status === Image.Error
+                    text: "\uf071"
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: overlay.s(20)
+                    color: MatugenColors.textDim
+                  }
+                }
+              }
+
+              // Selection ring
+              Rectangle {
+                anchors.fill: parent
+                radius: overlay.s(6)
+                color: "transparent"
+                border.width: overlay.s(2)
+                border.color: MatugenColors.accent
+                visible: thumbCard.isCurrent
+              }
+
+              // Video badge
+              Rectangle {
+                visible: thumbCard.isVideo
+                width: overlay.s(22)
+                height: overlay.s(22)
+                radius: overlay.s(6)
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: overlay.s(6)
+                color: Qt.rgba(0.1, 0.1, 0.12, 0.6)
+
+                Text {
+                  anchors.centerIn: parent
+                  text: "\uf03d"
+                  font.family: "JetBrainsMono Nerd Font"
+                  font.pixelSize: overlay.s(11)
+                  color: "white"
+                }
+              }
+
+              MouseArea {
+                id: thumbArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  // Side slivers move to the center first, the center one applies
+                  if (thumbCard.isCurrent) {
+                    root.applyWallpaper(thumbCard.modelData)
+                  } else {
+                    root.selectedIndex = thumbCard.index
+                  }
                 }
               }
             }
           }
 
-          Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            ListView {
-              id: listview
-              anchors.fill: parent
-              anchors.bottomMargin: overlay.s(10)
-              orientation: ListView.Horizontal
-              spacing: overlay.s(14)
-              clip: true
-              model: filteredModel
-              cacheBuffer: 2000
-              boundsBehavior: ListView.StopAtBounds
-              interactive: false
-              flickableDirection: Flickable.HorizontalFlick
-
-              currentIndex: root.selectedIndex
-              highlightFollowsCurrentItem: true
-              onCurrentIndexChanged: listview.positionViewAtIndex(currentIndex, ListView.Contain)
-
-              delegate: Item {
-                id: thumbCard
-                required property string modelData
-                required property int index
-                width: listview.height
-                height: listview.height
-
-                readonly property bool isVideo: root.isVideoFile(thumbCard.modelData)
-                readonly property bool isVideoContainer: root.isVideoContainerFile(thumbCard.modelData)
-                readonly property bool isGif: thumbCard.modelData.toLowerCase().endsWith(".gif")
-
-                Rectangle {
-                  anchors.fill: parent
-                  radius: overlay.s(12)
-                  clip: true
-                  color: "transparent"
-
-                  Image {
-                    anchors.fill: parent
-                    visible: !thumbCard.isVideoContainer
-                    source: thumbCard.isVideoContainer ? "" : "file://" + root.wallpaperDir + "/" + thumbCard.modelData
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    smooth: true
-                    sourceSize.width: thumbCard.width
-                    sourceSize.height: thumbCard.height
-                  }
-
-                  Image {
-  anchors.fill: parent
-  visible: thumbCard.isVideoContainer
-  source: {
-    root.posterCacheVersion
-    return thumbCard.isVideoContainer
-          ? "file://" + root.posterDir + "/" + thumbCard.modelData + ".jpg"
-          : ""
-  }
-  fillMode: Image.PreserveAspectCrop
-  asynchronous: true
-  smooth: true
-  sourceSize.width: thumbCard.width
-  sourceSize.height: thumbCard.height
-  cache: false
-
-  Rectangle {
-    anchors.fill: parent
-    visible: parent.status !== Image.Ready
-    color: Qt.rgba(MatugenColors.bgElevated.r, MatugenColors.bgElevated.g, MatugenColors.bgElevated.b, 1.0)
-  }
-
-  Text {
-    anchors.centerIn: parent
-    visible: parent.status === Image.Error
-    text: ""
-    font.family: "JetBrainsMono Nerd Font"
-    font.pixelSize: overlay.s(20)
-    color: MatugenColors.textDim
-  }
-}
-                }
-
-                Rectangle {
-                  anchors.fill: parent
-                  radius: overlay.s(12)
-                  color: "transparent"
-                  border.width: overlay.s(2)
-                  border.color: MatugenColors.accent
-                  visible: root.selectedIndex === thumbCard.index
-                }
-
-                Rectangle {
-                  id: gifBadge
-                  visible: thumbCard.isVideo
-                  width: overlay.s(22)
-                  height: overlay.s(22)
-                  radius: overlay.s(6)
-                  anchors.top: parent.top
-                  anchors.right: parent.right
-                  anchors.margins: overlay.s(6)
-                  color: Qt.rgba(0.1, 0.1, 0.12, 0.6)
-
-                  Text {
-                    anchors.centerIn: parent
-                    anchors.horizontalCenterOffset: 1
-                    text: ""
-                    font.pixelSize: overlay.s(20)
-                    color: "white"
-                  }
-                }
-
-                MouseArea {
-                  id: thumbArea
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: {
-                    root.selectedIndex = thumbCard.index
-                    root.applyWallpaper(thumbCard.modelData)
-                  }
-                }
-              }
-
-              ScrollBar.horizontal: ScrollBar {
-                id: hbar
-                policy: ScrollBar.AsNeeded
-                height: overlay.s(4)
-
-                contentItem: Rectangle {
-                  radius: overlay.s(8)
-                  color: Qt.rgba(MatugenColors.accent.r, MatugenColors.accent.g, MatugenColors.accent.b, 0.5)
-                }
-                background: Rectangle {
-                  radius: overlay.s(8)
-                  color: Qt.rgba(1, 1, 1, 0.05)
-                }
-              }
-            }
-
-            MouseArea {
-              anchors.fill: listview
-              acceptedButtons: Qt.NoButton
-              onWheel: (event) => {
-                let delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
-                if (delta < 0 && root.selectedIndex < filteredModel.values.length - 1) {
-                  root.selectedIndex++
-                } else if (delta > 0 && root.selectedIndex > 0) {
-                  root.selectedIndex--
-                }
-                event.accepted = true
-              }
-            }
+          // Name and position of the selected wallpaper
+          Rectangle {
+            visible: root.selectedIndex >= 0 && root.selectedIndex < filteredModel.values.length
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: carousel.topY + carousel.itemH + overlay.s(14)
+            height: overlay.s(26)
+            width: Math.min(nameText.implicitWidth + overlay.s(28), carousel.wideW)
+            radius: overlay.s(8)
+            color: Qt.rgba(MatugenColors.bgElevated.r, MatugenColors.bgElevated.g, MatugenColors.bgElevated.b, 0.92)
 
             Text {
-              visible: filteredModel.values.length === 0
+              id: nameText
               anchors.centerIn: parent
-              text: root.wallpapers.length === 0
-                    ? "No wallpapers found in\n" + root.wallpaperDir
-                    : "No matches"
+              width: parent.width - overlay.s(20)
               horizontalAlignment: Text.AlignHCenter
-              font.pixelSize: overlay.s(12)
+              elide: Text.ElideMiddle
+              text: (root.selectedIndex >= 0 && root.selectedIndex < filteredModel.values.length
+                     ? filteredModel.values[root.selectedIndex] : "")
+                    + "   " + (root.selectedIndex + 1) + " of " + filteredModel.values.length
+              font.pixelSize: overlay.s(11)
               font.family: "JetBrainsMono Nerd Font"
-              color: MatugenColors.textDim
-              wrapMode: Text.WordWrap
+              color: MatugenColors.text
             }
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.NoButton
+            onWheel: (event) => {
+              let delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
+              if (delta < 0 && root.selectedIndex < filteredModel.values.length - 1) {
+                root.selectedIndex++
+              } else if (delta > 0 && root.selectedIndex > 0) {
+                root.selectedIndex--
+              }
+              event.accepted = true
+            }
+          }
+
+          Text {
+            visible: filteredModel.values.length === 0
+            anchors.centerIn: parent
+            text: root.wallpapers.length === 0
+                  ? "No wallpapers found in\n" + root.wallpaperDir
+                  : "No matches"
+            horizontalAlignment: Text.AlignHCenter
+            font.pixelSize: overlay.s(13)
+            font.family: "JetBrainsMono Nerd Font"
+            color: MatugenColors.text
+            wrapMode: Text.WordWrap
           }
         }
       }

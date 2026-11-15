@@ -1,6 +1,7 @@
 import QtQuick
 import ".."
 import "../Singletons"
+import "../weather"
 
 Item {
   id: root

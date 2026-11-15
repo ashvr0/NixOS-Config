@@ -1,0 +1,12 @@
+ClickButton 1.0 Buttons/ClickButton.qml
+CloseButton 1.0 Buttons/CloseButton.qml
+IconButton 1.0 Buttons/IconButton.qml
+DeleteButton 1.0 Buttons/DeleteButton.qml
+ToggleSwitch 1.0 Inputs/ToggleSwitch.qml
+SegmentedControl 1.0 Inputs/SegmentedControl.qml
+ValueSlider 1.0 Inputs/ValueSlider.qml
+Stepper 1.0 Inputs/Stepper.qml
+TextBox 1.0 Inputs/TextBox.qml
+FilePickerDialog 1.0 Inputs/FilePickerDialog.qml
+Dropdown 1.0 Inputs/Dropdown.qml
+SettingRow 1.0 Settings/SettingRow.qml

@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "../Components"
 import ".."
 import "../Singletons"
 import "."
@@ -22,12 +23,6 @@ PanelWindow {
   }
   function s(v) { return Scaler.s(v) }
 
-  // ── Center/edge snap guides ──
-  // activeGuideX/Y hold the screen-space position of a guide line while
-  // dragging; -1 means "no guide showing". calculateSnap is called by
-  // each DesktopWidgetFrame while it drags, and returns an adjusted
-  // x/y (snapped when close enough to center or another widget's edge)
-  // plus which guide line(s) to show, if any.
   property real activeGuideX: -1
   property real activeGuideY: -1
 
@@ -104,27 +99,27 @@ PanelWindow {
   property real pendingImageY: 0
 
   Loader {
-  id: addImagePickerLoader
-  active: false
-  anchors.fill: parent
-  z: 1000
-  sourceComponent: FilePickerDialog {
-  titleText: "Choose image"
-  nameFilters: ["png", "jpg", "jpeg", "webp", "bmp", "gif"]
-  places: [
-    { name: "Home", icon: "󰋜", path: Quickshell.env("HOME") || "" },
-    { name: "Downloads", icon: "󰇚", path: (Quickshell.env("HOME") || "") + "/Downloads" },
-    { name: "Pictures", icon: "󰉏", path: (Quickshell.env("HOME") || "") + "/Pictures" },
-  ]
-  onAccepted: (path) => {
-    Config.addDesktopWidget("image", root.pendingImageX, root.pendingImageY)
-    let added = Config.desktopWidgets[Config.desktopWidgets.length - 1]
-    Config.updateDesktopWidget(added.id, { imagePath: path })
-    addImagePickerLoader.active = false
+    id: addImagePickerLoader
+    active: false
+    anchors.fill: parent
+    z: 1000
+    sourceComponent: FilePickerDialog {
+      titleText: "Choose image"
+      nameFilters: ["png", "jpg", "jpeg", "webp", "bmp", "gif"]
+      places: [
+        { name: "Home", icon: "󰋜", path: Quickshell.env("HOME") || "" },
+        { name: "Downloads", icon: "󰇚", path: (Quickshell.env("HOME") || "") + "/Downloads" },
+        { name: "Pictures", icon: "󰉏", path: (Quickshell.env("HOME") || "") + "/Pictures" },
+      ]
+      onAccepted: (path) => {
+        Config.addDesktopWidget("image", root.pendingImageX, root.pendingImageY)
+        let added = Config.desktopWidgets[Config.desktopWidgets.length - 1]
+        Config.updateDesktopWidget(added.id, { imagePath: path })
+        addImagePickerLoader.active = false
+      }
+      onCancelled: addImagePickerLoader.active = false
+    }
   }
-  onCancelled: addImagePickerLoader.active = false
-}
-}
 
   MouseArea {
     anchors.fill: parent
@@ -176,7 +171,6 @@ PanelWindow {
     }
   }
 
-  // ── Snap guide lines ──
   Rectangle {
     x: root.activeGuideX
     y: 0
@@ -283,45 +277,45 @@ PanelWindow {
       }
 
       Column {
-  anchors.verticalCenter: parent.verticalCenter
-  spacing: s(4)
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: s(4)
 
-  Rectangle {
-    width: s(56); height: s(56); radius: s(14)
-    anchors.horizontalCenter: parent.horizontalCenter
-    color: Config.desktopSnapToGrid
-      ? Qt.rgba(MatugenColors.accent.r, MatugenColors.accent.g, MatugenColors.accent.b, 0.28)
-      : (snapMa.containsMouse ? MatugenColors.bgElevated2 : MatugenColors.bgElevated)
-    border.width: Config.desktopSnapToGrid ? 1 : 0
-    border.color: MatugenColors.accent
-    Behavior on color { ColorAnimation { duration: 120 } }
+        Rectangle {
+          width: s(56); height: s(56); radius: s(14)
+          anchors.horizontalCenter: parent.horizontalCenter
+          color: Config.desktopSnapToGrid
+            ? Qt.rgba(MatugenColors.accent.r, MatugenColors.accent.g, MatugenColors.accent.b, 0.28)
+            : (snapMa.containsMouse ? MatugenColors.bgElevated2 : MatugenColors.bgElevated)
+          border.width: Config.desktopSnapToGrid ? 1 : 0
+          border.color: MatugenColors.accent
+          Behavior on color { ColorAnimation { duration: 120 } }
 
-    Text {
-      anchors.centerIn: parent
-      text: "󰕰"
-      font.pixelSize: s(20)
-      font.family: "JetBrainsMono Nerd Font"
-      color: Config.desktopSnapToGrid ? MatugenColors.accent : MatugenColors.textDim
-    }
+          Text {
+            anchors.centerIn: parent
+            text: "󰕰"
+            font.pixelSize: s(20)
+            font.family: "JetBrainsMono Nerd Font"
+            color: Config.desktopSnapToGrid ? MatugenColors.accent : MatugenColors.textDim
+          }
 
-    MouseArea {
-      id: snapMa
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onClicked: Config.desktopSnapToGrid = !Config.desktopSnapToGrid
-    }
-  }
+          MouseArea {
+            id: snapMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: Config.desktopSnapToGrid = !Config.desktopSnapToGrid
+          }
+        }
 
-  Text {
-    text: "Snap"
-    font.pixelSize: s(9)
-    font.weight: Font.Bold
-    font.family: Config.fontFamily
-    color: MatugenColors.textDim
-    anchors.horizontalCenter: parent.horizontalCenter
-  }
-}
+        Text {
+          text: "Snap"
+          font.pixelSize: s(9)
+          font.weight: Font.Bold
+          font.family: Config.fontFamily
+          color: MatugenColors.textDim
+          anchors.horizontalCenter: parent.horizontalCenter
+        }
+      }
 
       Rectangle {
         anchors.verticalCenter: parent.verticalCenter

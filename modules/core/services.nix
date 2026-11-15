@@ -11,6 +11,7 @@
   services.usbmuxd.enable = true;
   services.blueman.enable = false;
   services.pulseaudio.enable = false;
+  services.power-profiles-daemon.enable = true;
   services.pipewire = {
   enable = true;
   alsa.enable = true;
@@ -20,9 +21,8 @@
 };
   security.rtkit.enable = true;
   security.polkit.enable = true;
-  hardware.bluetooth.enable = true;
-  services.power-profiles-daemon.enable = true;
-
-  services.desktopManager.plasma6.enable = true;
-
+  hardware.bluetooth = {
+    enable = true;
+    powerOnBoot = false;
+  };
 }

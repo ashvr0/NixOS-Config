@@ -178,13 +178,44 @@ Item {
     }
   }
 
+  function cleanGpuName(raw) {
+    if (!raw) return "Unknown GPU"
+
+    let out = []
+    raw.split(" / ").forEach(function(part) {
+      let s = part.replace(/\(rev [0-9a-fA-F]+\)/gi, "")
+
+      let vendor = ""
+      if (/nvidia/i.test(s)) vendor = "NVIDIA"
+      else if (/\b(amd|ati|advanced micro)\b/i.test(s)) vendor = "AMD"
+      else if (/intel/i.test(s)) vendor = "Intel"
+
+      s = s.replace(/NVIDIA Corporation|Intel Corporation|Advanced Micro Devices,? Inc\.?|\[AMD\/ATI\]/gi, "").trim()
+
+      // marketing name is in the last [brackets], the chip code sits outside
+      let m = s.match(/\[([^\]]+)\](?!.*\[)/)
+      let name = m ? m[1] : s
+
+      // AMD lists variants like "Radeon RX 6600/6600 XT/6600M", keep the first
+      if (vendor === "AMD") name = name.split("/")[0]
+
+      name = name.replace(/\bLite Hash Rate\b/i, "").replace(/\s+/g, " ").trim()
+      if (!name) name = s
+
+      if (vendor && !name.toLowerCase().startsWith(vendor.toLowerCase())) name = vendor + " " + name
+      if (name && out.indexOf(name) === -1) out.push(name)
+    })
+
+    return out.length > 0 ? out.join(" / ") : "Unknown GPU"
+  }
+
   // GPU / disk model via one shell call (info with no clean single-file /proc or /sys source)
   Process {
     id: hwProc
     running: false
     command: [
       "bash", "-c",
-      "gpu=$(lspci 2>/dev/null | grep -iE 'vga|3d|display' | cut -d':' -f3 | sed -e 's/^[ \\t]*//' -e 's/ (rev .*)$//' | head -n1); " +
+      "gpu=$(lspci 2>/dev/null | grep -iE 'vga|3d|display' | cut -d':' -f3- | sed -e 's/^[ \\t]*//' -e 's/ (rev .*)$//' | head -n1); " +
       "[ -z \"$gpu\" ] && gpu=\"Unknown GPU\"; " +
       "disk_mod=$(lsblk -d -n -o MODEL 2>/dev/null | grep -v '^$' | head -n1); " +
       "[ -z \"$disk_mod\" ] && disk_mod=\"Generic Drive\"; " +
@@ -197,7 +228,7 @@ Item {
         if (!txt) return
         let p = txt.split("|")
         if (p.length >= 3) {
-          root.gpuModel = p[0]
+          root.gpuModel = root.cleanGpuName(p[0])
           root.diskModel = p[1]
           root.diskTotalGb = parseFloat((parseInt(p[2]) / 1073741824).toFixed(1))
         }
@@ -206,7 +237,6 @@ Item {
   }
 
   // Live polled stats
-
   Process {
     id: cpuProc
     command: ["sh", "-c", "head -n1 /proc/stat"]

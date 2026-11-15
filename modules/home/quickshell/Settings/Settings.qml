@@ -6,6 +6,8 @@ import Quickshell.Io
 import Quickshell.Wayland
 import ".."
 import "../Singletons"
+import "../weather"
+import "../Components"
 
 Item {
   id: root
@@ -42,10 +44,6 @@ Item {
   }
 
   // ── Current wallpaper preview ──
-  // The wallpaper picker (WallpaperPicker.qml) is a separate ShellRoot process.
-  // It persists the last-applied filename to its own session.json cache file
-  // rather than through the shared Config singleton, so we read that file
-  // directly here to know what's currently set.
   property string wallpaperCacheDir: root.homeDir + "/.cache/wallpaper-picker"
 
   FileView {
@@ -93,6 +91,28 @@ Item {
   property bool useFahrenheit: Config.tempUnitFahrenheit
   function toggleTempUnit() { Config.tempUnitFahrenheit = !Config.tempUnitFahrenheit }
 
+  // Weather polling: step through presets with the < > buttons
+  readonly property var pollChoices: [5, 10, 15, 30, 60, 120]
+  property int weatherPollMinutes: Config.weatherPollMinutes
+  function pollLabel(m) { return m >= 60 ? (m / 60) + " hr" : m + " min" }
+  function stepWeatherPoll(dir) {
+    let idx = root.pollChoices.indexOf(Config.weatherPollMinutes)
+    if (idx < 0) {
+      // Not a preset (hand-edited config): jump to the nearest one below
+      idx = 0
+      for (let i = 0; i < root.pollChoices.length; i++)
+        if (root.pollChoices[i] <= Config.weatherPollMinutes) idx = i
+    }
+    idx = Math.max(0, Math.min(root.pollChoices.length - 1, idx + dir))
+    Config.weatherPollMinutes = root.pollChoices[idx]
+    root.weatherPollMinutes = root.pollChoices[idx]
+  }
+
+  // Weather location source: "auto" (IP, fetched once), "city" or "coords"
+  property string weatherLocationMode: Config.weatherLocationMode
+  function autoDetectLocation() { Weather.autoDetect() }
+  function setWeatherCoords(lat, lon) { Weather.setCoords(lat, lon) }
+
   property string profilePicturePath: Config.profilePicturePath
   function setProfilePicturePath(path) {
     let clean = path.trim()
@@ -107,6 +127,7 @@ Item {
     if (!clean) return
     Config.weatherLocation = clean
     root.weatherLocation = clean
+    Config.weatherLocationMode = "city"
   }
 
   property var locationSuggestions: []
@@ -188,32 +209,63 @@ Item {
   }
 
   property string notifPosition: Config.notifPosition
-  function setNotifPosition(pos) {
-    if (!["top-left", "top", "top-right", "bottom-left", "bottom", "bottom-right"].includes(pos)) return
-    Config.notifPosition = pos
-    root.notifPosition = pos
-  }
+function setNotifPosition(pos) {
+  if (!["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"].includes(pos)) return
+  Config.notifPosition = pos
+  root.notifPosition = pos
+}
 
+property bool notifHideLockDescription: Config.notifHideLockDescription
+function toggleNotifHideLockDescription() {
+  Config.notifHideLockDescription = !Config.notifHideLockDescription
+  root.notifHideLockDescription = Config.notifHideLockDescription
+}
   property bool doNotDisturb: Notifs.silent
   function toggleDoNotDisturb() { Notifs.silent = !Notifs.silent; root.doNotDisturb = Notifs.silent }
 
   function sendTestNotification() { Notifs.sendTestNotification() }
 
+  property bool notifSound: Config.notifSound
+  function toggleNotifSound() { Config.notifSound = !Config.notifSound; root.notifSound = Config.notifSound }
+
+  property string notifSoundFile: Config.notifSoundFile
+  function pickNotifSoundFile() { soundFilePicker.visible = true; soundFilePicker.openWithOptionalPath(root.notifSoundFile) }
+
+  // Opens the launcher so you can preview position/width/items.
+  // Change "launcher" / "toggle" to match your launcher's IpcHandler.
+  function openLauncher() { Quickshell.execDetached(["qs", "ipc", "call", "launcher", "toggle"]) }
+
   property string currentTab: "general"
+  property string expandedTabId: ""
+  function tabActive(tab) {
+    if (tab.id === root.currentTab) return true
+    return tab.children !== undefined && tab.children.some(function(c) { return c.id === root.currentTab })
+  }
   onCurrentTabChanged: {
+    for (let i = 0; i < root.tabsList.length; i++) {
+      let t = root.tabsList[i]
+      if (t.children !== undefined && t.children.some(function(c) { return c.id === root.currentTab }))
+        root.expandedTabId = t.id
+    }
     root.capturingMainMod = false
-    generalTab.layoutDropdown.visible = false
-    switchDropdown.visible = false
-    appearanceTab.fontDropdown.visible = false
-    barPosDropdown.visible = false
+    if (generalTab.layoutDropdown) generalTab.layoutDropdown.visible = false
+    if (appearanceTab.fontDropdown) appearanceTab.fontDropdown.visible = false
     if (currentTab === "bar") root.refreshBarLayoutDraft()
     if (currentTab === "about") root.refreshAboutInfo()
   }
   property var tabsList: [
     { id: "general", label: "General", icon: "" },
-    { id: "bar", label: "Bar", icon: "󰹑"},
+    { id: "bar", label: "Bar", icon: "󰹑", children: [
+      { id: "bar", label: "General", icon: "󰒓" },
+      { id: "barModules", label: "Modules", icon: "󰕮" }
+    ] },
+    { id: "launcher", label: "Launcher", icon: "󰀻" },
     { id: "notifications", label: "Notifications", icon: "󰵛" },
-    { id: "appearance", label: "Appearance", icon: "󰏘" },
+    { id: "appearance", label: "Appearance", icon: "󰏘", children: [
+      { id: "appearance", label: "General", icon: "󰏘" },
+      { id: "wallpaper", label: "Wallpaper", icon: "󰋩" },
+      { id: "lock", label: "Lock", icon: "󰌾" }
+    ] },
     { id: "keybinds", label: "Keybinds", icon: "󰌌" },
     { id: "displays", label: "Displays", icon: "󰍹" },
     { id: "about", label: "About", icon: "󰋽" }
@@ -228,7 +280,7 @@ Item {
     return [...new Set(list)].sort()
   }
   function setFontFamily(f) { Config.fontFamily = f; root.fontFamily = f }
-  function setUiRadius(r) { r = Math.max(0, Math.min(20, r)); Config.uiRadius = r }
+  function setUiRadius(r) { r = Math.max(0, Math.min(25, r)); Config.uiRadius = r }
   property string colorScheme: Config.colorScheme
   function setColorScheme(id) { Config.colorScheme = id; root.colorScheme = id }
   property var barLayoutDraft: JSON.parse(JSON.stringify(Config.barLayout))
@@ -387,6 +439,13 @@ Item {
 
   property int capturingIdx: -1
   property bool capturingMainMod: false
+
+  function handleEscape() {
+    if (soundFilePicker.visible) soundFilePicker.visible = false
+    else if (root.capturingIdx >= 0) root.cancelCapture()
+    else if (root.capturingMainMod) root.cancelCaptureMainMod()
+    else root.menuOpen = false
+  }
 
   function startCaptureMainMod() { root.capturingMainMod = true }
   function cancelCaptureMainMod() { root.capturingMainMod = false }
@@ -959,55 +1018,83 @@ property int resDropdownIdx: -1
   }
 
   PanelWindow {
-    id: settingsPopup
-    visible: animOpacity > 0.01
-    color: "transparent"
+  id: settingsPopup
+  visible: animOpacity > 0.01
+  color: "transparent"
 
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-    WlrLayershell.namespace: "qs-settings-popup"
-    anchors { top: true; left: true; right: true; bottom: true }
+  WlrLayershell.layer: WlrLayer.Overlay
+  WlrLayershell.exclusionMode: ExclusionMode.Ignore
+  WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+  WlrLayershell.namespace: "qs-settings-popup"
+  anchors { top: true; left: true; right: true; bottom: true }
+  mask: Region { item: settingsCard }
 
-    property real animOpacity: root.menuOpen ? 1.0 : 0.0
-    Behavior on animOpacity { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
-    onVisibleChanged: if (!visible) { root.capturingMainMod = false; appearanceTab.fontDropdown.visible = false }
+  property real animOpacity: root.menuOpen ? 1.0 : 0.0
+  Behavior on animOpacity { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+  onVisibleChanged: if (!visible) {
+    root.capturingMainMod = false
+    root.cancelCapture()
+    if (appearanceTab.fontDropdown) appearanceTab.fontDropdown.visible = false
+  }
 
-    MouseArea {
-      anchors.fill: parent
-      onClicked: {
-        if (root.draggingModuleId !== "") return
-        root.menuOpen = false
-        root.cancelCapture()
-      }
+  // Re-grab keyboard focus every time the popup opens
+  Connections {
+    target: root
+    function onMenuOpenChanged() {
+      if (root.menuOpen) focusTimer.restart()
     }
+  }
+  Timer {
+    id: focusTimer
+    interval: 50   // let the layer surface map first
+    onTriggered: popupScope.forceActiveFocus()
+  }
 
-    FocusScope {
-      anchors.fill: parent
-      focus: root.menuOpen
-      Keys.onEscapePressed: {
-        if (root.capturingIdx >= 0) root.cancelCapture()
-        else if (root.capturingMainMod) root.cancelCaptureMainMod()
-        else root.menuOpen = false
+  // Window-wide Escape, independent of which item has focus
+  Shortcut {
+    sequence: "Escape"
+    context: Qt.WindowShortcut
+    enabled: root.menuOpen
+    onActivated: root.handleEscape()
+  }
+
+  FocusScope {
+    id: popupScope
+    anchors.fill: parent
+    focus: true   // plain value, not a binding
+    Keys.onEscapePressed: root.handleEscape()
+
+    Rectangle {
+      id: settingsCard
+      width: Math.min(s(1200), Screen.width - s(80))
+      height: Math.min(s(750), Screen.height - s(80))
+      x: Math.floor((Screen.width - width) / 2)
+      y: Math.floor((Screen.height - height) / 2)
+      radius: s(Config.uiRadius + 6)
+      color: Qt.rgba(MatugenColors.bgBase.r, MatugenColors.bgBase.g, MatugenColors.bgBase.b, 1)
+      border.width: 1
+      border.color: Qt.rgba(1, 1, 1, 0.06)
+      clip: true
+
+      opacity: settingsPopup.animOpacity
+      scale: 0.9 + 0.1 * settingsPopup.animOpacity
+      transform: Translate { y: (1 - settingsPopup.animOpacity) * -10 }
+
+      MouseArea { anchors.fill: parent }
+
+            MouseArea {
+        id: dragHandle
+        width: settingsCard.width
+        height: s(40)
+        z: 10
+        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+        drag.target: settingsCard
+        onPressed: popupScope.forceActiveFocus()
+        drag.minimumX: 0
+        drag.maximumX: Screen.width - settingsCard.width
+        drag.minimumY: 0
+        drag.maximumY: Screen.height - settingsCard.height
       }
-
-      Rectangle {
-        id: settingsCard
-        width: Math.max(s(1900), Math.min(s(1000), Screen.width - s(80)))
-        height: Math.max(s(500), Math.min(s(1100), Screen.height - s(80)))
-        x: Math.floor((Screen.width - width) / 2)
-        y: Math.floor((Screen.height - height) / 2)
-        radius: s(Config.uiRadius + 6)
-        color: Qt.rgba(MatugenColors.bgBase.r, MatugenColors.bgBase.g, MatugenColors.bgBase.b, 1)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.06)
-        clip: true
-
-        opacity: settingsPopup.animOpacity
-        scale: 0.9 + 0.1 * settingsPopup.animOpacity
-        transform: Translate { y: (1 - settingsPopup.animOpacity) * -10 }
-
-        MouseArea { anchors.fill: parent }
 
 
 
@@ -1069,43 +1156,164 @@ property int resDropdownIdx: -1
 
               Repeater {
                 model: root.tabsList
-                delegate: Rectangle {
-                  Layout.fillWidth: true
-                  Layout.preferredHeight: s(38)
-                  radius: s(Config.uiRadius)
-                  color: root.currentTab === modelData.id
-                    ? Qt.rgba(MatugenColors.accent.r, MatugenColors.accent.g, MatugenColors.accent.b, 0.85)
-                    : (tabMa.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
-                  Behavior on color { ColorAnimation { duration: 150 } }
+                delegate: ColumnLayout {
+                  id: tabGroup
+                  required property var modelData
+                  readonly property bool hasChildren: tabGroup.modelData.children !== undefined && tabGroup.modelData.children.length > 0
+                  readonly property bool groupActive: root.tabActive(tabGroup.modelData)
+                  readonly property bool open: tabGroup.hasChildren && root.expandedTabId === tabGroup.modelData.id
 
-                  RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: s(10)
-                    spacing: s(8)
-                    Text {
-                      text: modelData.icon
-                      font.pixelSize: s(13)
-                      font.family: "JetBrainsMono Nerd Font"
-                      color: root.currentTab === modelData.id ? MatugenColors.accentText : MatugenColors.textDim
-                      Behavior on color { ColorAnimation { duration: 150 } }
+                  Layout.fillWidth: true
+                  spacing: s(2)
+
+                  Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: s(38)
+                    radius: s(Config.uiRadius)
+                    color: tabGroup.groupActive
+                      ? (tabGroup.hasChildren
+                          ? Qt.rgba(MatugenColors.accent.r, MatugenColors.accent.g, MatugenColors.accent.b, 0.16)
+                          : Qt.rgba(MatugenColors.accent.r, MatugenColors.accent.g, MatugenColors.accent.b, 0.85))
+                      : (tabMa.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    readonly property color fg: tabGroup.groupActive
+                      ? (tabGroup.hasChildren ? MatugenColors.accent : MatugenColors.accentText)
+                      : MatugenColors.text
+
+                    RowLayout {
+                      anchors.fill: parent
+                      anchors.margins: s(10)
+                      spacing: s(8)
+                      Text {
+                        text: tabGroup.modelData.icon
+                        font.pixelSize: s(13)
+                        font.family: "JetBrainsMono Nerd Font"
+                        color: tabGroup.groupActive ? parent.parent.fg : MatugenColors.textDim
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                      }
+                      Text {
+                        text: tabGroup.modelData.label
+                        font.pixelSize: s(12)
+                        font.weight: tabGroup.groupActive ? Font.Bold : Font.Normal
+                        font.family: "JetBrainsMono Nerd Font"
+                        color: parent.parent.fg
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                      }
+                      Item { Layout.fillWidth: true }
+                      Text {
+                        visible: tabGroup.hasChildren
+                        text: tabGroup.open ? "󰅃" : "󰅀"
+                        font.pixelSize: s(13)
+                        font.family: "JetBrainsMono Nerd Font"
+                        color: tabGroup.groupActive ? parent.parent.fg : MatugenColors.textDim
+                      }
                     }
-                    Text {
-                      text: modelData.label
-                      font.pixelSize: s(12)
-                      font.weight: root.currentTab === modelData.id ? Font.Bold : Font.Normal
-                      font.family: "JetBrainsMono Nerd Font"
-                      color: root.currentTab === modelData.id ? MatugenColors.accentText : MatugenColors.text
-                      Behavior on color { ColorAnimation { duration: 150 } }
+
+                    MouseArea {
+                      id: tabMa
+                      anchors.fill: parent
+                      hoverEnabled: true
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: {
+                        root.cancelCapture()
+                        if (tabGroup.hasChildren) {
+                          if (tabGroup.open && tabGroup.groupActive) {
+                            root.expandedTabId = ""
+                          } else {
+                            root.expandedTabId = tabGroup.modelData.id
+                            if (!tabGroup.groupActive) root.currentTab = tabGroup.modelData.children[0].id
+                          }
+                        } else {
+                          root.currentTab = tabGroup.modelData.id
+                        }
+                      }
                     }
-                    Item { Layout.fillWidth: true }
                   }
 
-                  MouseArea {
-                    id: tabMa
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: { root.currentTab = modelData.id; root.cancelCapture() }
+                  Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: tabGroup.open ? subCol.implicitHeight : 0
+                    visible: Layout.preferredHeight > 0
+                    clip: true
+                    Behavior on Layout.preferredHeight { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
+                    Rectangle {
+                      anchors.left: parent.left
+                      anchors.leftMargin: s(14)
+                      anchors.top: parent.top
+                      anchors.bottom: parent.bottom
+                      width: s(2)
+                      radius: s(1)
+                      color: Qt.rgba(1, 1, 1, 0.12)
+                    }
+
+                    ColumnLayout {
+                      id: subCol
+                      anchors.left: parent.left
+                      anchors.right: parent.right
+                      anchors.leftMargin: s(14) + s(8)
+                      spacing: s(2)
+
+                      Repeater {
+                        model: tabGroup.hasChildren ? tabGroup.modelData.children : []
+                        delegate: Rectangle {
+                          id: subTab
+                          required property var modelData
+                          readonly property bool sel: root.currentTab === subTab.modelData.id
+
+                          Layout.fillWidth: true
+                          Layout.preferredHeight: s(38)
+                          radius: s(Config.uiRadius)
+                          color: subTab.sel
+                            ? MatugenColors.accent
+                            : (subMa.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
+                          Behavior on color { ColorAnimation { duration: 150 } }
+
+                          RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: s(6)
+                            anchors.rightMargin: s(10)
+                            spacing: s(10)
+
+                            Rectangle {
+                              Layout.preferredWidth: s(26)
+                              Layout.preferredHeight: s(26)
+                              radius: s(Config.uiRadius)
+                              color: subTab.sel
+                                ? Qt.rgba(MatugenColors.accentText.r, MatugenColors.accentText.g, MatugenColors.accentText.b, 0.22)
+                                : Qt.rgba(1, 1, 1, 0.06)
+                              Behavior on color { ColorAnimation { duration: 150 } }
+                              Text {
+                                anchors.centerIn: parent
+                                text: subTab.modelData.icon
+                                font.pixelSize: s(13)
+                                font.family: "JetBrainsMono Nerd Font"
+                                color: subTab.sel ? MatugenColors.accentText : MatugenColors.textDim
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                              }
+                            }
+                            Text {
+                              text: subTab.modelData.label
+                              font.pixelSize: s(12)
+                              font.weight: subTab.sel ? Font.Bold : Font.Normal
+                              font.family: "JetBrainsMono Nerd Font"
+                              color: subTab.sel ? MatugenColors.accentText : MatugenColors.text
+                              Behavior on color { ColorAnimation { duration: 150 } }
+                            }
+                            Item { Layout.fillWidth: true }
+                          }
+
+                          MouseArea {
+                            id: subMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: { root.currentTab = subTab.modelData.id; root.cancelCapture() }
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -1122,7 +1330,7 @@ property int resDropdownIdx: -1
           Layout.fillWidth: true
           Layout.fillHeight: true
           contentWidth: width
-          onContentYChanged: { root.capturingMainMod = false; appearanceTab.fontDropdown.visible = false }
+          onContentYChanged: { root.capturingMainMod = false; if (appearanceTab.fontDropdown) appearanceTab.fontDropdown.visible = false }
           contentHeight: mainColumn.implicitHeight
           clip: true
           boundsBehavior: Flickable.StopAtBounds
@@ -1140,6 +1348,12 @@ property int resDropdownIdx: -1
               matches: root.matches
               useFahrenheit: root.useFahrenheit
               toggleTempUnit: root.toggleTempUnit
+              weatherPollMinutes: root.weatherPollMinutes
+              pollLabel: root.pollLabel
+              stepWeatherPoll: root.stepWeatherPoll
+              weatherLocationMode: root.weatherLocationMode
+              autoDetectLocation: root.autoDetectLocation
+              setWeatherCoords: root.setWeatherCoords
               weatherLocation: root.weatherLocation
               setWeatherLocation: root.setWeatherLocation
               queueLocationLookup: root.queueLocationLookup
@@ -1179,10 +1393,27 @@ property int resDropdownIdx: -1
               activeDragPill: root.activeDragPill
               controller: root
               dragSurfaceItem: mainFlick.contentItem
+            }
+
+            BarModulesTab {
+              visible: root.currentTab === "barModules"
+              Layout.fillWidth: true
+              s: root.s
+              matches: root.matches
+              controller: root
               showClockSeconds: root.showClockSeconds
               toggleClockSeconds: root.toggleClockSeconds
               clock24h: root.clock24h
               toggleClock24h: root.toggleClock24h
+            }
+
+            LauncherTab {
+              visible: root.currentTab === "launcher"
+              Layout.fillWidth: true
+              s: root.s
+              matches: root.matches
+              fontFamily: root.fontFamily
+              openLauncher: root.openLauncher
             }
 
             NotifactionTab {
@@ -1190,15 +1421,22 @@ property int resDropdownIdx: -1
               Layout.fillWidth: true
               s: root.s
               matches: root.matches
+              popupLayer: settingsCard
+  notifHideLockDescription: root.notifHideLockDescription
+  toggleNotifHideLockDescription: root.toggleNotifHideLockDescription
               notifPosition: root.notifPosition
               setNotifPosition: root.setNotifPosition
               doNotDisturb: root.doNotDisturb
+              notifSound: root.notifSound
+              toggleNotifSound: root.toggleNotifSound
+              notifSoundFile: root.notifSoundFile
+              pickNotifSoundFile: root.pickNotifSoundFile
               toggleDoNotDisturb: root.toggleDoNotDisturb
               sendTestNotification: root.sendTestNotification
             }
 
             AppearanceTab {
-      id: appearanceTab
+              id: appearanceTab
               visible: root.currentTab === "appearance"
               Layout.fillWidth: true
               s: root.s
@@ -1206,13 +1444,30 @@ property int resDropdownIdx: -1
               fontFamily: root.fontFamily
               fontChoices: root.fontChoices
               setFontFamily: root.setFontFamily
-              currentWallpaperPath: root.currentWallpaperPath
-              wallpaperDir: root.wallpaperDir
-              setWallpaperDir: root.setWallpaperDir
               colorScheme: root.colorScheme
               setColorScheme: root.setColorScheme
               themeSearchQuery: root.themeSearchQuery
               themeMatches: root.themeMatches
+            }
+
+            WallpaperTab {
+              visible: root.currentTab === "wallpaper"
+              Layout.fillWidth: true
+              s: root.s
+              matches: root.matches
+              fontFamily: root.fontFamily
+              currentWallpaperPath: root.currentWallpaperPath
+              wallpaperDir: root.wallpaperDir
+              setWallpaperDir: root.setWallpaperDir
+            }
+
+            LockTab {
+              visible: root.currentTab === "lock"
+              Layout.fillWidth: true
+              s: root.s
+              matches: root.matches
+              fontFamily: root.fontFamily
+              currentWallpaperPath: root.currentWallpaperPath
             }
 
             KeybindsTab {
@@ -1296,4 +1551,19 @@ property int resDropdownIdx: -1
       }
     }
   }
+
+FilePickerDialog {
+  id: soundFilePicker
+  visible: false
+  z: 1000
+  titleText: "Choose notification sound"
+  nameFilters: ["wav", "mp3", "ogg", "oga", "flac", "opus"]
+  onAccepted: (path) => {
+    soundFilePicker.visible = false
+    Config.notifSoundFile = path
+    root.notifSoundFile = path
+    Sounds.play(path)
+  }
+  onCancelled: soundFilePicker.visible = false
+}
 }

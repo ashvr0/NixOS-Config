@@ -7,9 +7,9 @@
   };
 
   environment.sessionVariables = {
-    XCURSOR_THEME = "Nordic-cursors";
+    XCURSOR_THEME = "Bibata-Modern-Classic";
     XCURSOR_SIZE = "24";
-    HYPRCURSOR_THEME = "Nordic-cursors";
+    HYPRCURSOR_THEME = "Bibata-Modern-Classic";
     HYPRCURSOR_SIZE = "24";
   };
 
